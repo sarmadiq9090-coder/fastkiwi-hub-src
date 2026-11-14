@@ -1,0 +1,45 @@
+{
+  "events": [
+    {
+      "app": "instawords",
+      "ev": "ready",
+      "module_version": "3.0.0",
+      "ms": 802
+    },
+    {
+      "app": "instawords",
+      "ev": "page",
+      "ms": 1608,
+      "state": {
+        "brand": 2,
+        "brand_hidden": 2,
+        "digits": "arab",
+        "dir": "rtl",
+        "hosted": true,
+        "lang": "ar",
+        "marker": true,
+        "theme": "light",
+        "title": "InstaWords — تفقيط المبالغ بالحروف بالعربية والإنجليزية والفرنسية | FastKiwi",
+        "tone": "light",
+        "url": "https://fkmod.instawords/index.html"
+      }
+    },
+    {
+      "app": "instawords",
+      "dry_run": true,
+      "ev": "launch",
+      "ms": 1608,
+      "target": "exe InstaWords.exe"
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "ar",
+  "resolved": {
+    "digits": "arab",
+    "lang": "ar",
+    "theme": "light"
+  },
+  "screen": "app:instawords",
+  "theme": "light",
+  "upd": {}
+}

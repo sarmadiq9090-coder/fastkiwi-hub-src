@@ -234,3 +234,18 @@ Other rules:
   - `updates-check`;
   - `updates-run` (set `FK_STUB_STEP_MS` to slow the stub down).
 - **Version.** The Hub moves to 0.2.0: new features, SemVer minor. All screenshots were captured again from the running app.
+
+## D-H28 Integration fixes: no `window.ipc` in module pages; integration hooks
+
+- **Found on 2026-11-14 in the first integration run** (INTEGRATION-REPORT.md).
+  - wry defines a frozen, non-configurable `window.ipc` in every WebView that has an IPC handler.
+  - InstaFind's hub page defines its own `window.ipc`, which it uses to talk to its own server. In the Hub that definition threw, so the page's own requests went to the Hub as web messages. The Hub dropped them as «proto is not fastkiwi-module@1», and InstaFind's language reload never ran.
+- **Decision.** Module WebViews no longer use wry's IPC handler. The Hub reads `WebMessageReceived` from WebView2 directly (`on_web_message`) and adds no global except the `__FASTKIWI_HUB__` marker.
+  - `MODULE-CONTRACT.md` §2 now says so.
+  - A guard test keeps `.with_ipc_handler` on the Hub's own page only.
+  - The Hub's own page keeps `window.ipc`.
+- **Integration hooks**, dev and off-screen only:
+  - `--dev-report <file.json>` records the handshake, `ready`, a probe of the hosted page's state (theme, tone, lang, dir, digits, brand hidden, marker), the page's own `open-own-window`, and the update results.
+  - Dev copies (`--dev-host`) now carry their file version and, for kind S, their `web\` entry.
+  - During `--dev-shot` runs, «افتح في نافذته» is recorded, not executed, so no app window ever appears on the PC (D-H11).
+- **Council.** 5 of 5. The architect seat noted that the contract never promised `window.ipc`, so removing it is a fix, not a contract change.

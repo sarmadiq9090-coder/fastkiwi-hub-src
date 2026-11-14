@@ -1,0 +1,21 @@
+fastkiwi-hub-cli@1 conformance: instafind
+PASS M1   fastkiwi-hub.json next to the exe: instafind declares --hub-host --hub-update --export-data
+PASS H1   --hub-host prints one valid handshake line: port 61764, version 1.1.0, 50 ms
+PASS H2   listens on 127.0.0.1 only: refused on [::1]:61764, 192.168.0.55:61764
+PASS H3   no cookie: 403 on every path
+PASS H4   wrong key: 403
+PASS H5   enter: 303 to / with the session cookie
+PASS H6   page: HTML, CSP, nosniff, module meta, embed.js
+PASS H7   embed.js is a pinned release: fastkiwi-embed 1.0.0
+PASS H8   Host guard
+PASS H9   Origin and Sec-Fetch-Site guard
+PASS H10  no CORS
+PASS H11  two runs at once: own port, own key
+PASS H12  no visible window
+PASS H13  nothing more on stdout
+PASS H14  exits when stdin closes
+PASS U1   --hub-update --check-only: valid lines, order, exit code: none
+PASS E1   --export-data into a new folder: 11 file(s), 3475 bytes
+PASS E2   --export-data refuses a non-empty folder
+PASS C1   bad command lines exit 2 and print nothing: --hub-host --fastkiwi-no-such-flag; --hub-update --fastkiwi-no-such-flag; --export-data
+RESULT conforms

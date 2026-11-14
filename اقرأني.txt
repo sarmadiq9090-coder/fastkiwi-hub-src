@@ -36,6 +36,8 @@ FastKiwi Hub — النموذج التجريبي (المرحلة D)، الإصد
 خيارات المطوّر
 - --dev : يُظهر InstaConvert ويفتح وحدة InstaWords التجريبية (stub).
 - --dev-host <id>=<مسار exe> : يعامل ذلك الملف كنسخة من البرنامج، مثل stub-app.exe من tools\conformance.
+- --dev-report "<ملف json>" (مع --dev-shot) : يسجّل المصافحة وحالة الصفحة المستضافة ونتائج التحديث، لتقارير التكامل.
+  أثناء التصوير لا يفتح «افتح في نافذته» أي نافذة على الجهاز، بل يُسجَّل فقط.
 - --dev-module-dir "<مجلد>" : يستضيف نسخة ويب محلية، مثل E:\fast kiwi pro neq\InstaWords\_site
 - --detect-json "<ملف>" : يكتب نتيجة الفحص في ملف JSON ثم يخرج.
 - --dev-shot "<ملف png>" --screen home|app|app:<id>|add|settings|updates|updates-check|updates-run

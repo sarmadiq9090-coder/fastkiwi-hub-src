@@ -135,3 +135,18 @@ fn hub_commands_only_with_contract_flags() {
         }
     }
 }
+
+#[test]
+fn module_pages_get_no_window_ipc() {
+    // wry's `.with_ipc_handler` defines a frozen `window.ipc` in the page. Only the Hub's own
+    // page may have it; module WebViews take web messages from WebView2 directly (D-H28).
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let main = std::fs::read_to_string(root.join("src").join("main.rs")).unwrap();
+    assert_eq!(main.matches(".with_ipc_handler(").count(), 1);
+    let hub_view = main
+        .find("let hub = WebViewBuilder::new_with_web_context(&mut hub_ctx)")
+        .unwrap();
+    let ipc = main.find(".with_ipc_handler(").unwrap();
+    assert!(ipc > hub_view, "the only IPC handler is the Hub page's own");
+    assert!(main.contains("on_web_message(&webview,"));
+}

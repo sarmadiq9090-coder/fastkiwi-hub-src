@@ -1,0 +1,53 @@
+{
+  "events": [
+    {
+      "app": "lemon",
+      "ev": "handshake",
+      "ms": 172,
+      "name": "lemon",
+      "port": 64837,
+      "version": "2.2.0"
+    },
+    {
+      "app": "lemon",
+      "ev": "ready",
+      "module_version": "2.2.0",
+      "ms": 701
+    },
+    {
+      "app": "lemon",
+      "ev": "page",
+      "ms": 1504,
+      "state": {
+        "brand": 1,
+        "brand_hidden": 1,
+        "digits": "latn",
+        "dir": "ltr",
+        "hosted": true,
+        "lang": "en",
+        "marker": true,
+        "theme": "dark",
+        "title": "Lemon",
+        "tone": "dark",
+        "url": "http://127.0.0.1:64837/"
+      }
+    },
+    {
+      "app": "lemon",
+      "dry_run": true,
+      "ev": "launch",
+      "ms": 1504,
+      "target": "exe local-ai-chat.exe"
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "en",
+  "resolved": {
+    "digits": "latn",
+    "lang": "en",
+    "theme": "dark"
+  },
+  "screen": "app:lemon",
+  "theme": "dark",
+  "upd": {}
+}

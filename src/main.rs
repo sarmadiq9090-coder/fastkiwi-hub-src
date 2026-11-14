@@ -50,6 +50,22 @@ mod hub {
     };
 
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+    /// Integration runs: what the hosted page shows after the Hub's settings arrived.
+    const PROBE_JS: &str = r#"(() => { try {
+  const h = document.documentElement;
+  const brand = [...document.querySelectorAll("[data-fk-brand]")];
+  return JSON.stringify({
+    url: location.origin + location.pathname, title: document.title,
+    marker: !!window.__FASTKIWI_HUB__, hosted: h.hasAttribute("data-fk-hosted"),
+    theme: h.dataset.theme ?? null, tone: h.dataset.tone ?? null, lang: h.lang, dir: h.dir,
+    digits: h.dataset.digits ?? null,
+    brand: brand.length, brand_hidden: brand.filter((e) => getComputedStyle(e).display === "none").length,
+    sample: (document.body?.innerText ?? "").slice(0, 160)
+  });
+} catch (e) { return JSON.stringify({ error: String(e) }); } })()"#;
+    /// Integration runs: the page asks for its own window through its own copy of embed.js.
+    const OPEN_OWN_JS: &str =
+        r#"import("/__fastkiwi/embed.js").then((m) => m.openOwnWindow()).catch(() => {});"#;
     /// A module that has not said `ready` this long after its page loaded does not speak the
     /// protocol (yet): the Hub says so in the module bar.
     const READY_TIMEOUT: Duration = Duration::from_millis(2500);
@@ -88,6 +104,14 @@ mod hub {
         },
         ShotNow,
         ShotTimeout,
+        /// Integration runs: read the hosted page's state, then ask it to open its own window.
+        Probe {
+            app: String,
+        },
+        ProbeResult {
+            app: String,
+            json: String,
+        },
     }
 
     #[derive(Debug, Clone)]
@@ -100,6 +124,8 @@ mod hub {
         /// `--dev-host <id>=<exe>`: treat that exe (and the `fastkiwi-hub.json` next to it) as a
         /// portable copy of the app, e.g. `stub-app.exe` from `tools/conformance`.
         dev_hosts: Vec<(String, PathBuf)>,
+        /// `--dev-report <file.json>` (with `--dev-shot`): what happened, for integration runs.
+        dev_report: Option<PathBuf>,
     }
 
     #[derive(Debug, Clone)]
@@ -118,6 +144,7 @@ mod hub {
             detect_json: None,
             shot: None,
             dev_hosts: Vec::new(),
+            dev_report: None,
         };
         let mut it = std::env::args().skip(1);
         let (mut screen, mut theme, mut lang, mut out) = (
@@ -138,6 +165,7 @@ mod hub {
                     a.catalog = it.next().map(PathBuf::from);
                 }
                 "--detect-json" => a.detect_json = it.next().map(PathBuf::from),
+                "--dev-report" => a.dev_report = it.next().map(PathBuf::from),
                 "--dev-host" => {
                     a.dev = true;
                     if let Some((id, exe)) = it.next().as_deref().and_then(|v| v.split_once('='))
@@ -228,6 +256,9 @@ mod hub {
         /// Each app's update check runs at most once per Hub start by itself (setting on).
         auto_checked: bool,
         shot_tries: u32,
+        /// `--dev-report` events, written when a shot run ends.
+        report: Vec<Value>,
+        started: Instant,
     }
 
     struct Run {
@@ -318,6 +349,35 @@ mod hub {
                     let _ = s.SetIsZoomControlEnabled(false);
                 }
             }
+        }
+    }
+
+    /// Receive a WebView's web messages (`chrome.webview.postMessage` with a string) without
+    /// wry's IPC handler, so the page gets no extra global (`window.ipc`). `f(source, body)`.
+    fn on_web_message(wv: &WebView, f: impl Fn(String, String) + 'static) {
+        use webview2_com::{WebMessageReceivedEventHandler, take_pwstr};
+        use windows::core::PWSTR;
+        let handler = WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            // SAFETY: COM out-parameters filled by WebView2 and freed by take_pwstr.
+            unsafe {
+                let mut src = PWSTR::null();
+                args.Source(&mut src)?;
+                let source = take_pwstr(src);
+                let mut text = PWSTR::null();
+                // Non-string messages (postMessage of an object) are not part of the contract.
+                if args.TryGetWebMessageAsString(&mut text).is_ok() {
+                    f(source, take_pwstr(text));
+                }
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: COM call on the UI thread; the handler lives as long as the WebView.
+        unsafe {
+            let _ = wv.webview().add_WebMessageReceived(&handler, &mut token);
         }
     }
 
@@ -526,6 +586,21 @@ mod hub {
                 _ => return Err("nothing to launch".into()),
             };
             self.last_launch.insert(id.to_string(), now);
+            if self.args.shot.is_some() {
+                // Off-screen runs never open a window on the PC (D-H11): record what would start.
+                let kind = match &target {
+                    Target::Exe(e) => format!(
+                        "exe {}",
+                        std::path::Path::new(e)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    ),
+                    Target::Aumid(a) => format!("aumid {a}"),
+                };
+                self.rec(json!({"ev": "launch", "app": id, "target": kind, "dry_run": true}));
+                return Ok(());
+            }
             win::launch(&target)
         }
 
@@ -594,6 +669,33 @@ mod hub {
             }
         }
 
+        fn rec(&mut self, mut v: Value) {
+            if self.args.dev_report.is_none() {
+                return;
+            }
+            if let Value::Object(o) = &mut v {
+                o.insert(
+                    "ms".into(),
+                    json!(self.started.elapsed().as_millis() as u64),
+                );
+            }
+            self.report.push(v);
+        }
+
+        fn write_report(&self) {
+            if let Some(out) = &self.args.dev_report {
+                let s = self.args.shot.as_ref();
+                let v = json!({
+                    "hub": VERSION,
+                    "screen": s.map(|s| &s.screen), "theme": s.map(|s| &s.theme), "lang": s.map(|s| &s.lang),
+                    "resolved": {"theme": self.resolved.0, "lang": self.resolved.1, "digits": self.resolved.2},
+                    "events": self.report,
+                    "upd": self.upd,
+                });
+                let _ = std::fs::write(out, serde_json::to_string_pretty(&v).unwrap_or_default());
+            }
+        }
+
         fn trace(&self, msg: &str) {
             if self.args.dev || std::env::var_os("FASTKIWI_TRACE").is_some() {
                 eprintln!("{msg}");
@@ -606,6 +708,7 @@ mod hub {
             }
             match ev {
                 HostEvent::Ready(h) => {
+                    self.rec(json!({"ev": "handshake", "app": app, "port": h.port, "name": h.name, "version": h.version}));
                     if !self.modules.contains_key(app) {
                         self.build_module_view(
                             app,
@@ -616,11 +719,13 @@ mod hub {
                     }
                 }
                 HostEvent::Failed(f) => {
+                    self.rec(json!({"ev": "host-failed", "app": app, "why": format!("{f:?}")}));
                     self.trace(&format!("{app}: no valid handshake: {f:?}"));
                     self.hosts.remove(app);
                     self.send_ui(json!({"type": "module", "app": app, "status": "host-failed"}));
                 }
                 HostEvent::Exited(code) => {
+                    self.rec(json!({"ev": "host-exited", "app": app, "code": code}));
                     self.trace(&format!("{app}: --hub-host exited ({code:?})"));
                     self.hosts.remove(app);
                     if self.modules.get(app).is_some_and(|m| m.epoch == epoch) {
@@ -677,15 +782,9 @@ mod hub {
                 .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
                 .with_download_started_handler(|_, _| false)
                 .with_permission_handler(|_| PermissionResponse::Deny)
-                .with_ipc_handler(move |req: Request<String>| {
-                    // Only messages from the module's own origin count.
-                    if req.uri().to_string().starts_with(&origin) {
-                        let _ = p_ipc.send_event(Ev::ModuleIpc {
-                            app: ipc_id.clone(),
-                            body: req.into_body(),
-                        });
-                    }
-                })
+                // No `.with_ipc_handler`: wry would then define a frozen `window.ipc` in the
+                // hosted page, a name the module contract does not give modules (and that an
+                // app's own page may use). Web messages are taken from WebView2 directly below.
                 .with_on_page_load_handler(move |e, _| {
                     if matches!(e, PageLoadEvent::Finished) {
                         let _ = p_load.send_event(Ev::ModuleLoaded {
@@ -703,6 +802,15 @@ mod hub {
             match built {
                 Ok(webview) => {
                     harden(&webview, self.args.dev, false);
+                    on_web_message(&webview, move |source, body| {
+                        // Only messages from the module's own origin count.
+                        if source.starts_with(&origin) {
+                            let _ = p_ipc.send_event(Ev::ModuleIpc {
+                                app: ipc_id.clone(),
+                                body,
+                            });
+                        }
+                    });
                     let _ = webview.set_visible(self.module_visible && self.shown_app == id);
                     self.send_ui(json!({"type": "module", "app": id, "status": "loading", "source": source.label()}));
                     self.modules.insert(
@@ -805,7 +913,9 @@ mod hub {
                 UpdateEvent::End(end) => {
                     if let hostproc::UpdateEnd::Broken(why) = &end {
                         self.trace(&format!("{app}: --hub-update broke the contract: {why}"));
+                        self.rec(json!({"ev": "update-broken", "app": app, "why": why}));
                     }
+                    self.rec(json!({"ev": "update-end", "app": app, "check_only": check_only, "line": end.shown()}));
                     self.runs.remove(app);
                     (end.shown(), false)
                 }
@@ -851,13 +961,19 @@ mod hub {
                     0,
                     detect::Install {
                         source: detect::Source::Portable,
-                        version: None,
+                        version: detect::windows::file_version(&exe.display().to_string()),
                         size_bytes: std::fs::metadata(exe).ok().map(|m| m.len()),
                         location: dir.display().to_string(),
                         exe: Some(exe.display().to_string()),
                         aumid: None,
                         launchable: exe.is_file(),
-                        web_entry: None,
+                        web_entry: self
+                            .app(id)
+                            .and_then(|a| a.hub.as_ref())
+                            .and_then(|h| h.module.as_ref())
+                            .map(|m| dir.join(&m.web_dir).join(&m.entry))
+                            .filter(|p| p.is_file())
+                            .map(|p| p.display().to_string()),
                         found_by: "dev-host",
                         hub,
                     },
@@ -885,6 +1001,15 @@ mod hub {
                     }
                     self.send_ui(json!({"type": "module", "app": app, "status": "ready", "module_version": version,
                         "source": self.modules.get(app).map(|m| m.source.label())}));
+                    self.rec(json!({"ev": "ready", "app": app, "module_version": version}));
+                    if self.args.dev_report.is_some() {
+                        let p = self.proxy.clone();
+                        let app = app.to_string();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(800));
+                            let _ = p.send_event(Ev::Probe { app });
+                        });
+                    }
                 }
                 Ok(ModuleMsg::OpenOwnWindow {}) => {
                     let r = match self.first_launchable(app) {
@@ -894,6 +1019,7 @@ mod hub {
                     self.send_ui(json!({"type": "launched", "app": app, "ok": r.is_ok(), "error": r.err(), "from": "module"}));
                 }
                 Err(e) => {
+                    self.rec(json!({"ev": "proto-error", "app": app, "error": e.to_string()}));
                     self.send_ui(
                         json!({"type": "proto-error", "app": app, "error": e.to_string()}),
                     );
@@ -1001,8 +1127,14 @@ mod hub {
                 }
                 "shot-ready" if self.args.shot.is_some() => {
                     let p = self.proxy.clone();
+                    // An integration run waits for the page probe and its open-own-window.
+                    let wait = if self.args.dev_report.is_some() {
+                        3500
+                    } else {
+                        700
+                    };
                     std::thread::spawn(move || {
-                        std::thread::sleep(Duration::from_millis(700));
+                        std::thread::sleep(Duration::from_millis(wait));
                         let _ = p.send_event(Ev::ShotNow);
                     });
                 }
@@ -1028,9 +1160,11 @@ mod hub {
                         && !m.ready
                     {
                         self.send_ui(json!({"type": "module", "app": app, "status": "no-proto", "source": m.source.label()}));
+                        self.rec(json!({"ev": "no-proto", "app": app}));
                     }
                 }
                 Ev::Blocked { who, host } => {
+                    self.rec(json!({"ev": "blocked", "app": who, "host": host}));
                     self.send_ui(json!({"type": "blocked", "app": who, "host": host}));
                 }
                 Ev::Detected(mut d) => {
@@ -1046,7 +1180,34 @@ mod hub {
                 }
                 Ev::Host { app, epoch, ev } => self.on_host(&app, epoch, ev),
                 Ev::Update { app, run, ev } => self.on_update(&app, run, ev),
+                Ev::Probe { app } => {
+                    if let Some(m) = self.modules.get(&app) {
+                        let p = self.proxy.clone();
+                        let a = app.clone();
+                        let _ = m
+                            .webview
+                            .evaluate_script_with_callback(PROBE_JS, move |json| {
+                                let _ = p.send_event(Ev::ProbeResult {
+                                    app: a.clone(),
+                                    json,
+                                });
+                            });
+                    }
+                }
+                Ev::ProbeResult { app, json } => {
+                    // The callback gets the JSON of the script's value: here a JSON string.
+                    let inner = serde_json::from_str::<String>(&json)
+                        .ok()
+                        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                        .unwrap_or(Value::String(json));
+                    self.rec(json!({"ev": "page", "app": app, "state": inner}));
+                    // Then the page asks for its own window through its own adapter.
+                    if let Some(m) = self.modules.get(&app) {
+                        let _ = m.webview.evaluate_script(OPEN_OWN_JS);
+                    }
+                }
                 Ev::ShotNow => {
+                    self.write_report();
                     if let Some(s) = &self.args.shot {
                         self.window.set_minimized(false);
                         match win::capture_client_png(self.window.hwnd(), &s.out) {
@@ -1067,6 +1228,8 @@ mod hub {
                     *flow = ControlFlow::Exit;
                 }
                 Ev::ShotTimeout => {
+                    self.rec(json!({"ev": "shot-timeout"}));
+                    self.write_report();
                     eprintln!("shot timed out");
                     *flow = ControlFlow::Exit;
                 }
@@ -1186,6 +1349,8 @@ mod hub {
             upd: HashMap::new(),
             auto_checked: false,
             shot_tries: 0,
+            report: Vec::new(),
+            started: Instant::now(),
         };
 
         event_loop.run(move |event, _, flow| {

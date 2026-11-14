@@ -21,7 +21,7 @@ The contract covers only the page-to-Hub channel. It gives a module **no** acces
 | Own origin | A kind S module is served at `https://fkmod.<id>/` by a custom protocol handler. No local HTTP server. |
 | Navigation allowlist | The top-level page may only be on its own origin (and `about:blank`). Every other URL (other hosts, `http:`, ports, user info, `file:`, `data:`, `javascript:`, `blob:`, store links) is cancelled, and the Hub shows a notice. |
 | No network | Every response carries a Content-Security-Policy with `default-src 'self'`, `connect-src 'self'`, `frame-src 'none'`, `worker-src 'none'`, `object-src 'none'`, `form-action 'none'`. Fetches to other origins fail; a module must work offline. |
-| No host objects | `AreHostObjectsAllowed = false`. The only bridge is WebView2 web messages. |
+| No host objects, no globals | `AreHostObjectsAllowed = false`. The only bridge is WebView2 web messages (`window.chrome.webview`). The Hub adds no global to the page except the marker `window.__FASTKIWI_HUB__` (HUB-APP-CONTRACT §4.6); in particular there is **no `window.ipc`**, so a module may define its own (D-H28). |
 | No pop-ups, downloads or permissions | New windows, downloads and permission requests (camera, microphone, location, notifications, clipboard read, …) are refused. Clipboard **write** after a user gesture works. |
 | Files | Only regular files inside the module's folder are served (no `..`, no links out of the folder). Unknown file types are served as `application/octet-stream`. |
 

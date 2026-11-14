@@ -1,0 +1,21 @@
+fastkiwi-hub-cli@1 conformance: instawords
+PASS M1   fastkiwi-hub.json next to the exe: instawords declares --hub-update --export-data
+SKIP H1   --hub-host prints one valid handshake line: --hub-host not declared
+SKIP H2   listens on 127.0.0.1 only: --hub-host not declared
+SKIP H3   no cookie: 403 on every path: --hub-host not declared
+SKIP H4   wrong key: 403: --hub-host not declared
+SKIP H5   enter: 303 to / with the session cookie: --hub-host not declared
+SKIP H6   page: HTML, CSP, nosniff, module meta, embed.js: --hub-host not declared
+SKIP H7   embed.js is a pinned release: --hub-host not declared
+SKIP H8   Host guard: --hub-host not declared
+SKIP H9   Origin and Sec-Fetch-Site guard: --hub-host not declared
+SKIP H10  no CORS: --hub-host not declared
+SKIP H11  two runs at once: own port, own key: --hub-host not declared
+SKIP H12  no visible window: --hub-host not declared
+SKIP H13  nothing more on stdout: --hub-host not declared
+SKIP H14  exits when stdin closes: --hub-host not declared
+PASS U1   --hub-update --check-only: valid lines, order, exit code: none
+PASS E1   --export-data into a new folder: 0 file(s), 0 bytes
+PASS E2   --export-data refuses a non-empty folder
+PASS C1   bad command lines exit 2 and print nothing: --hub-update --fastkiwi-no-such-flag; --export-data
+RESULT conforms

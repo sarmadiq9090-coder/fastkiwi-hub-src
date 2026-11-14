@@ -1,0 +1,77 @@
+{
+  "events": [
+    {
+      "app": "instafind",
+      "ev": "handshake",
+      "ms": 203,
+      "name": "instafind",
+      "port": 52551,
+      "version": "1.1.0"
+    },
+    {
+      "app": "instafind",
+      "ev": "ready",
+      "module_version": "1.1.0",
+      "ms": 783
+    },
+    {
+      "app": "instafind",
+      "ev": "ready",
+      "module_version": "1.1.0",
+      "ms": 1228
+    },
+    {
+      "app": "instafind",
+      "ev": "page",
+      "ms": 1586,
+      "state": {
+        "brand": 0,
+        "brand_hidden": 0,
+        "digits": "latn",
+        "dir": "ltr",
+        "hosted": true,
+        "lang": "en",
+        "marker": true,
+        "theme": "light",
+        "title": "InstaFind",
+        "tone": "light",
+        "url": "http://127.0.0.1:52551/"
+      }
+    },
+    {
+      "app": "instafind",
+      "dry_run": true,
+      "ev": "launch",
+      "ms": 1587,
+      "target": "exe bahth.exe"
+    },
+    {
+      "app": "instafind",
+      "ev": "page",
+      "ms": 2032,
+      "state": {
+        "brand": 0,
+        "brand_hidden": 0,
+        "digits": "latn",
+        "dir": "ltr",
+        "hosted": true,
+        "lang": "en",
+        "marker": true,
+        "theme": "light",
+        "title": "InstaFind",
+        "tone": "light",
+        "url": "http://127.0.0.1:52551/"
+      }
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "en",
+  "resolved": {
+    "digits": "latn",
+    "lang": "en",
+    "theme": "light"
+  },
+  "screen": "app:instafind",
+  "theme": "light",
+  "upd": {}
+}

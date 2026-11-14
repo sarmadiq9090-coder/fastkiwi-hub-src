@@ -1,0 +1,53 @@
+{
+  "events": [
+    {
+      "app": "instafind",
+      "ev": "handshake",
+      "ms": 313,
+      "name": "instafind",
+      "port": 59662,
+      "version": "1.1.0"
+    },
+    {
+      "app": "instafind",
+      "ev": "ready",
+      "module_version": "1.1.0",
+      "ms": 882
+    },
+    {
+      "app": "instafind",
+      "ev": "page",
+      "ms": 1688,
+      "state": {
+        "brand": 0,
+        "brand_hidden": 0,
+        "digits": "arab",
+        "dir": "rtl",
+        "hosted": true,
+        "lang": "ar",
+        "marker": true,
+        "theme": "auto",
+        "title": "InstaFind",
+        "tone": "dark",
+        "url": "http://127.0.0.1:59662/"
+      }
+    },
+    {
+      "app": "instafind",
+      "dry_run": true,
+      "ev": "launch",
+      "ms": 1689,
+      "target": "exe bahth.exe"
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "ar",
+  "resolved": {
+    "digits": "arab",
+    "lang": "ar",
+    "theme": "midnight"
+  },
+  "screen": "app:instafind",
+  "theme": "midnight",
+  "upd": {}
+}

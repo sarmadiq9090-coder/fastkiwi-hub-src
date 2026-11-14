@@ -1,0 +1,30 @@
+{
+  "events": [
+    {
+      "app": "instafind",
+      "check_only": true,
+      "ev": "update-end",
+      "line": {
+        "proto": "fastkiwi-hub-cli@1",
+        "state": "none"
+      },
+      "ms": 759
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "ar",
+  "resolved": {
+    "digits": "arab",
+    "lang": "ar",
+    "theme": "light"
+  },
+  "screen": "updates-check",
+  "theme": "light",
+  "upd": {
+    "instafind": {
+      "check_only": true,
+      "running": false,
+      "state": "none"
+    }
+  }
+}

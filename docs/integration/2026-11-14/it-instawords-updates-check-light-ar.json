@@ -1,0 +1,30 @@
+{
+  "events": [
+    {
+      "app": "instawords",
+      "check_only": true,
+      "ev": "update-end",
+      "line": {
+        "proto": "fastkiwi-hub-cli@1",
+        "state": "none"
+      },
+      "ms": 1502
+    }
+  ],
+  "hub": "0.2.0",
+  "lang": "ar",
+  "resolved": {
+    "digits": "arab",
+    "lang": "ar",
+    "theme": "light"
+  },
+  "screen": "updates-check",
+  "theme": "light",
+  "upd": {
+    "instawords": {
+      "check_only": true,
+      "running": false,
+      "state": "none"
+    }
+  }
+}
