@@ -162,6 +162,14 @@ impl SystemView for WindowsView {
         std::env::var(name).ok().filter(|v| !v.is_empty())
     }
 
+    fn read_text(&self, path: &str) -> Option<String> {
+        let m = std::fs::metadata(path).ok()?;
+        if !m.is_file() || m.len() > 4096 {
+            return None;
+        }
+        std::fs::read_to_string(path).ok()
+    }
+
     fn file(&self, path: &str) -> Option<FileFacts> {
         let m = std::fs::metadata(path).ok()?;
         m.is_file().then(|| FileFacts {

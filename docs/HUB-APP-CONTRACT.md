@@ -150,6 +150,7 @@ Answer `403` with an empty body when a guard fails. A missing `Host` may also ge
 - Before any page script runs, it adds an initialization script that sets `window.__FASTKIWI_HUB__ = {proto: "fastkiwi-module@1", module: "<id>"}`. `embed.js` uses this to tell the Hub's WebView from the app's own WebView2 window.
 - The `fastkiwi-module@1` messages then flow as in `MODULE-CONTRACT.md` §5. On `ready`, the Hub sends `theme`, `lang` and `digits`.
 - If the handshake is missing, late or invalid, or the process exits early, the Hub shows «يفتح في نافذته» and offers to open the app standalone.
+- **Store copies (Hub 0.2.0).** The Hub drives only copies it can start by path: Inno, NSIS, winget and portable. A Store copy needs its app execution alias, so that it runs with package identity and `StoreContext` works. Until spike S1 proves that path, a Store copy opens in its own window and updates in the Store (D-H24). Nothing changes on the app's side: ship `fastkiwi-hub.json` in the package anyway.
 
 ## 5. `--hub-update`
 

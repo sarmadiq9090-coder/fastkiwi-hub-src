@@ -1,5 +1,6 @@
-//! Static guards for the prototype's hard rules: detection never writes, and the Hub has no
-//! network, install, update or uninstall code. A grep over the sources, so a later change that
+//! Static guards for the Hub's hard rules: detection never writes; the Hub has no network,
+//! install or uninstall code of its own; updates and hosting go only through the apps' own
+//! hub commands (src/hostproc.rs). A grep over the sources, so a later change that
 //! adds such a call fails here first.
 
 use std::path::Path;
@@ -92,15 +93,45 @@ fn no_network_code() {
 
 #[test]
 fn launch_is_shell_execute_only() {
+    // Standalone launches are ShellExecute and forget. The only process the Hub starts with
+    // pipes is an app's hub command, in src/hostproc.rs (fastkiwi-hub-cli@1, D-H23).
     for (path, text) in sources() {
         for f in [
             "CreateProcess",
-            "std::process::Command",
-            "Command::new",
             "WinExec",
             "AssignProcessToJobObject",
+            "ShellExecuteEx",
         ] {
             assert!(!text.contains(f), "{path} contains {f}");
+        }
+        if !path.ends_with("hostproc.rs") {
+            for f in ["std::process::Command", "Command::new", "process::Stdio"] {
+                assert!(!text.contains(f), "{path} contains {f}");
+            }
+        }
+    }
+}
+
+#[test]
+fn hub_commands_only_with_contract_flags() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let text = std::fs::read_to_string(root.join("src").join("hostproc.rs")).unwrap();
+    // One place builds the command: the exe detection found, stdio piped, stderr to NUL, no
+    // console window.
+    assert_eq!(text.matches("Command::new(").count(), 1);
+    assert_eq!(text.matches(".args(").count(), 1);
+    assert!(text.contains(".stderr(Stdio::null())"));
+    assert!(text.contains("CREATE_NO_WINDOW"));
+    // Its arguments come only from the contract's own flags.
+    assert!(text.contains("command(exe, &[hubcli::Command::HubHost.flag()])"));
+    assert!(text.contains("let mut a = vec![hubcli::Command::HubUpdate.flag().to_string()];"));
+    for flag in ["--export-data", "--hub-host\"", "--hub-update\""] {
+        assert!(!text.contains(flag), "hostproc.rs spells {flag} by hand");
+    }
+    // Nobody else builds commands.
+    for (path, t) in sources() {
+        if !path.ends_with("hostproc.rs") {
+            assert!(!t.contains("hostproc::command"), "{path}");
         }
     }
 }

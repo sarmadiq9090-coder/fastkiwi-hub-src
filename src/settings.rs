@@ -45,6 +45,9 @@ pub struct Settings {
     pub follow: bool,
     /// App ids hidden from the home page.
     pub hidden: Vec<String>,
+    /// «تحقق من التحديثات تلقائيًا»: off until the user turns it on (HUB-DESIGN §3). When on,
+    /// the Hub runs each app's `--hub-update --check-only` once after detection.
+    pub check_updates: bool,
 }
 
 impl Default for Settings {
@@ -55,6 +58,7 @@ impl Default for Settings {
             digits: DigitsChoice::Auto,
             follow: true,
             hidden: Vec::new(),
+            check_updates: false,
         }
     }
 }

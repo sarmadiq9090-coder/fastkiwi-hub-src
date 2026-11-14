@@ -66,6 +66,8 @@ pub trait SystemView {
     /// The current user's package with this family name.
     fn store_package(&self, pfn: &str) -> Option<PackageFacts>;
     fn dir_size(&self, path: &str) -> Option<u64>;
+    /// A small text file (at most 4 KiB), for `fastkiwi-hub.json`. Read only.
+    fn read_text(&self, path: &str) -> Option<String>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -95,6 +97,15 @@ pub struct Install {
     pub web_entry: Option<String>,
     /// How this copy was found (probe kind), for the "source" line.
     pub found_by: &'static str,
+    /// The hub commands this copy declares in its `fastkiwi-hub.json` (fastkiwi-hub-cli@1),
+    /// or `None` when it has no valid file for this app (an older build: own window only).
+    pub hub: Option<Vec<hubcli::Command>>,
+}
+
+impl Install {
+    pub fn declares(&self, c: hubcli::Command) -> bool {
+        self.hub.as_ref().is_some_and(|h| h.contains(&c))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -195,6 +206,7 @@ fn exe_install(
         aumid: None,
         launchable: true,
         found_by,
+        hub: None,
     })
 }
 
@@ -244,6 +256,7 @@ fn probe_uninstall(
             aumid: None,
             launchable: exists,
             found_by: "uninstall",
+            hub: None,
         });
     }
     out
@@ -317,6 +330,7 @@ pub fn detect_app(view: &dyn SystemView, app: &App) -> AppDetection {
                     aumid: Some(format!("{pfn}!{app_id}")),
                     launchable: true,
                     found_by: "store",
+                    hub: None,
                 })
                 .into_iter()
                 .collect(),
@@ -368,11 +382,28 @@ pub fn detect_app(view: &dyn SystemView, app: &App) -> AppDetection {
     if !installs.is_empty() {
         used_before = false;
     }
+    for i in &mut installs {
+        i.hub = hub_caps(view, app, i);
+    }
     AppDetection {
         id: app.id.clone(),
         installs,
         used_before,
     }
+}
+
+/// The commands in the copy's `fastkiwi-hub.json` (next to its exe, or in its package folder).
+/// A missing, invalid or foreign file means no hub mode.
+fn hub_caps(view: &dyn SystemView, app: &App, i: &Install) -> Option<Vec<hubcli::Command>> {
+    let dir = i
+        .exe
+        .as_deref()
+        .map(parent)
+        .unwrap_or_else(|| i.location.clone());
+    let text = view.read_text(&join(&dir, hubcli::APP_MANIFEST))?;
+    hubcli::parse_app_manifest(&text, Some(&app.id))
+        .ok()
+        .map(|m| m.commands)
 }
 
 /// Detect every app in `apps`.

@@ -194,9 +194,3 @@ fn path_rules() {
     assert!(catalog::valid_pfn("FastKiwi.InstaWords_sm1xjmj6v76yc"));
     assert!(!catalog::valid_pfn("FastKiwi.InstaWords_SM1XJMJ6V76YC"));
 }
-
-#[test]
-fn updates_fixture_is_valid_json() {
-    let v: serde_json::Value = serde_json::from_str(catalog::UPDATES_FIXTURE).unwrap();
-    assert_eq!(v["rows"].as_array().unwrap().len(), 4);
-}

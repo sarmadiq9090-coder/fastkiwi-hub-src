@@ -31,3 +31,7 @@ windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[dev-dependencies]
+# The Hub's host side (src/hostproc.rs, src/hosting.rs), tested here against stub-app.
+kiwi_hub = { package = "fastkiwi-hub", path = "../.." }

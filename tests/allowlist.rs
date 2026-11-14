@@ -147,6 +147,33 @@ fn embedded_ui_has_its_pages() {
     assert_eq!(serve::mime("x.exe"), "application/octet-stream");
 }
 
+#[test]
+fn process_module_stays_on_its_port() {
+    use kiwi_hub::allowlist::{process_nav_allowed as ok, process_origin};
+    assert!(ok("http://127.0.0.1:49731/", 49731));
+    assert!(ok("http://127.0.0.1:49731/__fastkiwi/enter?key=abc", 49731));
+    assert!(ok("http://127.0.0.1:49731/chat#x", 49731));
+    assert!(ok("about:blank", 49731));
+    for bad in [
+        "http://127.0.0.1:49732/",
+        "http://127.0.0.1/",
+        "https://127.0.0.1:49731/",
+        "http://localhost:49731/",
+        "http://[::1]:49731/",
+        "http://user@127.0.0.1:49731/",
+        "http://127.0.0.1.evil.example:49731/",
+        "http://evil.example/",
+        "ws://127.0.0.1:49731/",
+        "file:///C:/x",
+        "data:text/html,x",
+        "javascript:alert(1)",
+        "fkmod://lemon/index.html",
+    ] {
+        assert!(!ok(bad, 49731), "{bad}");
+    }
+    assert_eq!(process_origin(49731), "http://127.0.0.1:49731/");
+}
+
 #[cfg(windows)]
 #[test]
 fn launch_targets_are_checked() {

@@ -152,6 +152,9 @@ struct Server {
 }
 
 fn host(f: &Faults) -> i32 {
+    if f.has("no-handshake") {
+        return hubcli::exit::FAILED;
+    }
     let bind = if f.has("bind-all") {
         "0.0.0.0:0"
     } else {

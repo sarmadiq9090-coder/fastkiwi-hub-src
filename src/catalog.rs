@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 
 /// The catalog compiled into the exe.
 pub const FIXTURE: &str = include_str!("../catalog/apps.json");
-/// The Updates screen fixture compiled into the exe (UI only).
-pub const UPDATES_FIXTURE: &str = include_str!("../catalog/updates.fixture.json");
 
 /// Text in the two UI languages (BCP 47 `ar`, `en`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

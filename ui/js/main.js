@@ -1,6 +1,7 @@
-// FastKiwi Hub UI (Phase C prototype). Vanilla ES module, served over the fastkiwi custom
-// protocol. Talks to FastKiwi.exe only through window.ipc.postMessage (WebView2 web messages).
-// Everything shown comes from the fixture catalog and the read-only detection; nothing is fetched.
+// FastKiwi Hub UI. Vanilla ES module, served over the fastkiwi custom protocol. Talks to
+// FastKiwi.exe only through window.ipc.postMessage (WebView2 web messages). Everything shown
+// comes from the catalog, the read-only detection and the apps' own hub commands
+// (fastkiwi-hub-cli@1); the page itself fetches nothing.
 import { icon as I } from "./icons.js";
 import { STR } from "./i18n.js";
 
@@ -13,7 +14,8 @@ const S = {
   dlg: null,         // {kind: "add"|"ask"|"priv", app}
   scanning: true,
   scannedAt: null,
-  demo: null,        // update demo progress 0..1
+  upd: {},           // app id -> last --hub-update line {state, progress?, version?, code?, check_only, running}
+  lastCheck: null,   // when the "check now" button last ran (this session)
   note: null,        // notice shown in the module bar
   shotSent: false,
 };
@@ -73,7 +75,8 @@ const canHost = (id) => !!det(id)?.module;
 function hubbar() {
   const t = T();
   const tab = (v, ic, label, extra = "") => `<a href="#" data-go="${v}" class="${S.view === v ? "on" : ""}" aria-current="${S.view === v ? "page" : "false"}">${I(ic, 20)} ${label}${extra}</a>`;
-  const updBadge = `<span class="pin" style="background:var(--accent);color:var(--on-accent)" aria-label="${n(1)}">${n(1)}</span>`;
+  const avail = Object.values(S.upd).filter((r) => r.state === "available").length;
+  const updBadge = avail ? `<span class="pin" style="background:var(--accent);color:var(--on-accent)" aria-label="${n(avail)}">${n(avail)}</span>` : "";
   const openTabs = S.open.map((id) => {
     const a = app(id); const on = S.view === "app" && S.cur === id;
     return `<span class="tabw${on ? " on" : ""}"><a href="#" data-tab="${esc(id)}" aria-current="${on ? "page" : "false"}"><img src="${iconOf(a)}" alt=""><bdi>${nameOf(a)}</bdi></a><button class="x" data-close="${esc(id)}" aria-label="${esc(t.close(a?.name?.[resolved().lang] ?? id))}" title="${esc(t.close(a?.name?.[resolved().lang] ?? id))}">${I("dismiss", 12)}</button></span>`;
@@ -95,7 +98,6 @@ const tag = (ic, s) => `<span class="tag">${I(ic)}${s}</span>`;
 function opensTag(a) {
   const t = T();
   if (canHost(a.id)) return tag("apps", a.kind === "S" ? t.opensHereWeb : t.opensHere);
-  if (a.kind === "P") return tag("desktop", t.hostLater);
   return tag("desktop", t.opensWindow);
 }
 function installedCard(a) {
@@ -163,12 +165,15 @@ function appView() {
   const m = S.mod[S.cur] ?? { status: "loading" };
   const statusChip = {
     loading: `<span class="chip">${I("arrow_sync")} ${t.modLoading}</span>`,
+    starting: `<span class="chip">${I("arrow_sync")} ${t.modStarting}</span>`,
+    "host-failed": `<span class="chip warn">${I("warning_f")} ${t.modHostFailed}</span>`,
+    "host-exited": `<span class="chip warn">${I("warning_f")} ${t.modHostExited}</span>`,
     ready: `<span class="chip ok">${I("checkmark_circle_f")} ${t.modReady}</span>`,
     "no-proto": `<span class="chip warn">${I("warning_f")} ${t.modNoProto}</span>`,
     unavailable: `<span class="chip warn">${I("warning_f")} ${t.modUnavailable}</span>`,
     error: `<span class="chip bad">${I("warning_f")} ${t.modError}</span>`,
   }[m.status] ?? "";
-  const srcChip = m.source ? `<span class="chip">${{ installed: t.srcInstalled, "dev-dir": t.srcDev, stub: t.srcStub }[m.source]}</span>` : "";
+  const srcChip = m.source ? `<span class="chip">${{ installed: t.srcInstalled, "dev-dir": t.srcDev, stub: t.srcStub, process: t.srcProcess }[m.source]}</span>` : "";
   const launchable = installs(S.cur).some((i) => i.launchable);
   const firstI = installs(S.cur).findIndex((i) => i.launchable);
   return `<div class="modbar">
@@ -178,41 +183,66 @@ function appView() {
       ${S.note ? `<span class="chip ${S.note.bad ? "bad" : "ok"}" role="status">${I(S.note.bad ? "warning_f" : "checkmark_circle_f")} ${esc(S.note.msg)}</span>` : `<span class="hosted">${I("lock_closed")} ${t.hosted}</span>`}
       <button class="btn" data-launch="${esc(S.cur)}" data-i="${firstI}" ${launchable ? "" : `disabled title="${esc(t.noCopy)}"`}>${I("desktop")} ${t.openOwnWindow}</button>
     </div>
-    <main class="modview modhost" id="modhost" aria-label="${nameOf(a)}"><div class="modwait">${m.status === "unavailable" || m.status === "error" ? (m.status === "error" ? t.modError : t.modUnavailable) : t.modLoading}</div></main>`;
+    <main class="modview modhost" id="modhost" aria-label="${nameOf(a)}"><div class="modwait">${{ unavailable: t.modUnavailable, error: t.modError, starting: t.modStarting, "host-failed": t.modHostFailed, "host-exited": t.modHostExited }[m.status] ?? t.modLoading}</div></main>`;
 }
 
-// ---------- updates (fixture, UI only) ----------
+// ---------- updates: each app's own --hub-update (fastkiwi-hub-cli@1) ----------
+const route = (id) => det(id)?.update?.route ?? "not-installed";
+function updState(id) {
+  const t = T();
+  const r = S.upd[id];
+  const grow = `<span class="grow"></span>`;
+  const btn = (attr, label, primary = false) => `<button class="btn${primary ? " primary" : ""}" style="min-height:32px;height:32px" ${attr}="${esc(id)}">${label}</button>`;
+  const row = (inner) => `<div style="display:flex;align-items:center;gap:8px">${inner}</div>`;
+  if (route(id) === "store") return `<span class="state na">${t.updStoreLater}</span>`;
+  if (route(id) !== "hub") return `<span class="state na">${t.updOwnApp}</span>`;
+  if (!r) return row(`<span class="state na">${t.neverChecked}</span>${grow}${btn("data-updcheck", t.updCheck)}`);
+  switch (r.state) {
+    case "checking":
+      return `<span class="state na" role="status">${I("arrow_sync")} ${t.updChecking}</span>`;
+    case "available":
+      return row(`<span class="state">${t.updAvailable(ver(r.version))}</span>${grow}${btn("data-updrun", t.updNow, true)}`);
+    case "downloading":
+    case "installing": {
+      const p = r.progress ?? 0;
+      const cancel = r.state === "downloading" ? btn("data-updcancel", t.updCancel) : "";
+      return `<div style="display:flex;align-items:center;gap:8px"><div class="prog" style="flex:1"><div class="pl"><b role="status">${t.updating(pct(p))}</b></div><div class="bar" role="progressbar" aria-valuenow="${Math.round(p * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${nameOf(app(id))}"><i style="width:${p * 100}%"></i></div></div>${cancel}</div>`;
+    }
+    case "done":
+      return row(`<span class="state ok">${I("checkmark_circle_f")} ${t.updated}</span>${grow}${btn("data-reopen", t.reopen)}`);
+    case "none":
+      return row(`<span class="state ok">${I("checkmark_circle_f")} ${t.latest}</span>${grow}${btn("data-updcheck", t.updCheck)}`);
+    default:
+      return row(`<span class="state" style="color:var(--warn)">${I("warning_f")} ${t.updErr[r.code] ?? t.updErr.internal}</span>${grow}${btn(r.check_only ? "data-updcheck" : "data-updrun", t.updRetry)}`);
+  }
+}
 function updatesView() {
   const t = T();
-  const fx = S.st.updates ?? { rows: [] };
-  const COLS = "grid-template-columns:minmax(0,1fr) 150px 170px 300px;height:64px";
-  const rowsHtml = fx.rows.map((r) => {
-    const a = r.app === "hub" ? { name: { ar: t.hubSelf, en: t.hubSelf }, icon: "icons/fastkiwi.svg" } : app(r.app);
-    if (!a) return "";
-    const v = r.to && r.state !== "done" && r.state !== "latest" ? `${ver(r.from)} → <b style="color:var(--accent)">${ver(r.to)}</b>` : `<b>${ver(r.to ?? r.from)}</b>`;
-    const src = r.route === "store-here" ? `<span class="chip accent">${I("shield_checkmark")} ${t.storeHere}</span>` : `<span class="chip">${I("shield_checkmark")} ${t.storeOnly}</span>`;
-    let st = "";
-    const p = r.state === "updating" ? (S.demo ?? r.progress) : null;
-    if (r.state === "updating" && p < 1) {
-      st = `<div class="prog"><div class="pl"><b>${t.updating(pct(p))}</b><span class="faint">${t.ofMb(mb(Math.round(r.total_mb * p * 10) / 10), mb(r.total_mb))}</span></div><div class="bar" role="progressbar" aria-valuenow="${Math.round(p * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${nameOf(a)}"><i style="width:${p * 100}%"></i></div></div>`;
-    } else if (r.state === "done" || r.state === "updating") {
-      st = `<div style="display:flex;align-items:center;gap:8px"><span class="state ok">${I("checkmark_circle_f")} ${t.updated}</span><span class="grow"></span><button class="btn" style="min-height:32px;height:32px" disabled>${t.reopen}</button></div>`;
-    } else if (r.state === "redirect") {
-      st = `<div style="display:flex;align-items:center;gap:8px"><span class="state na">${t.redirect}</span><span class="grow"></span><button class="btn" style="min-height:32px;height:32px" disabled>${I(resolved().lang === "ar" ? "arrow_export_rtl" : "arrow_export_ltr")} ${t.updInStore}</button></div>`;
-    } else {
-      st = `<span class="state ok">${I("checkmark_circle_f")} ${t.latest}</span>`;
-    }
-    return `<div class="r" role="row" style="${COLS}"><span class="fn"><img src="${iconOf(a)}" alt="" style="width:28px;height:28px;border-radius:6px"><b style="font-weight:600"><bdi>${nameOf(a)}</bdi></b></span><span>${v}</span><span>${src}</span><span style="justify-self:stretch">${st}</span></div>`;
+  const COLS = "grid-template-columns:minmax(0,1fr) 150px 170px 340px;height:64px";
+  const srcChip = (rt) => rt === "hub" ? `<span class="chip accent">${I("arrow_sync")} ${t.routeHub}</span>`
+    : rt === "store" ? `<span class="chip">${I("shield_checkmark")} ${t.storeOnly}</span>`
+    : `<span class="chip">${I("desktop")} ${t.opensWindow}</span>`;
+  const mine = apps().filter((a) => isInstalled(a.id));
+  const rowsHtml = mine.map((a) => {
+    const from = installs(a.id)[0]?.version;
+    const r = S.upd[a.id];
+    const to = r?.version && r.state !== "none" ? r.version : null;
+    // Installed → offered while an update is pending; the new version once it is done.
+    const v = r?.state === "done" && to ? `<b>${ver(to)}</b>`
+      : to && to !== from ? `${from ? ver(from) : "—"} → <b style="color:var(--accent)">${ver(to)}</b>`
+      : from ? `<b>${ver(from)}</b>` : `<span class="faint">—</span>`;
+    return `<div class="r" role="row" style="${COLS}"><span class="fn"><img src="${iconOf(a)}" alt="" style="width:28px;height:28px;border-radius:6px"><b style="font-weight:600"><bdi>${nameOf(a)}</bdi></b></span><span>${v}</span><span>${srcChip(route(a.id))}</span><span style="justify-self:stretch">${updState(a.id)}</span></div>`;
   }).join("");
-  const [hh, mm] = (fx.last_check ?? "09:00").split(":").map(Number);
-  const lc = new Date(); lc.setHours(hh, mm, 0, 0);
-  return `<div class="scroll"><div class="wrap hub" style="max-width:1060px;gap:14px">
+  const hubRow = `<div class="r" role="row" style="${COLS}"><span class="fn"><img src="icons/fastkiwi.svg" alt="" style="width:28px;height:28px;border-radius:6px"><b style="font-weight:600">${t.hubSelf}</b></span><span><b>${ver(S.st.version)}</b></span><span>${srcChip("store")}</span><span class="state na">${t.updHubSelf}</span></div>`;
+  const any = mine.some((a) => route(a.id) === "hub");
+  const busy = mine.some((a) => S.upd[a.id]?.running);
+  return `<div class="scroll"><div class="wrap hub" style="max-width:1100px;gap:14px">
     <div class="hello"><div><h1>${t.updates}</h1><p>${t.updLead}</p></div><span class="grow"></span>
-      <span class="faint" style="font-size:12.5px">${t.lastCheck(time(lc))}</span><button class="btn" disabled title="${esc(t.protoNoInstall)}">${I("arrow_sync")} ${t.checkNow}</button></div>
-    <div class="note">${I("info")}<span>${t.fixtureNote}</span><span class="grow"></span><button class="btn subtle" data-demo style="min-height:28px;height:28px;font-size:12.5px">${t.playDemo}</button></div>
+      <span class="faint" style="font-size:12.5px">${S.lastCheck ? t.lastCheck(time(S.lastCheck)) : t.neverChecked}</span><button class="btn" data-updcheck="" ${any && !busy ? "" : "disabled"}>${I("arrow_sync")} ${t.checkNow}</button></div>
+    <div class="note">${I("info")}<span>${t.updNote}</span></div>
     <div class="rows" role="table">
       <div class="r h" role="row" style="${COLS.replace("64px", "32px")}"><span role="columnheader">${t.colApp}</span><span role="columnheader">${t.colVer}</span><span role="columnheader">${t.colSrc}</span><span role="columnheader">${t.colState}</span></div>
-      ${rowsHtml}
+      ${rowsHtml}${hubRow}
     </div>
     <div class="how">
       <div><b>${I("shield_checkmark")} ${t.howStore}</b><span>${t.howStoreS}</span></div>
@@ -259,7 +289,7 @@ function settingsView() {
           ${apps().map(modrow).join("")}
         </div>
         <div class="box">
-          <div class="it">${I("shield_checkmark", 20)}<div class="lab"><b>${t.checkUpd}</b><small>${t.checkUpdS}</small></div><button type="button" class="toggle off" role="switch" aria-checked="false" aria-label="${esc(t.checkUpd)}" disabled></button></div>
+          <div class="it">${I("shield_checkmark", 20)}<div class="lab"><b>${t.checkUpd}</b><small>${t.checkUpdS}</small></div><button type="button" class="toggle${st.check_updates ? "" : " off"}" role="switch" aria-checked="${!!st.check_updates}" aria-label="${esc(t.checkUpd)}" data-checkupd></button></div>
         </div>
       </div>
     </div>
@@ -333,7 +363,7 @@ function render() {
 let ro = null;
 function syncModule() {
   const host = $("#modhost");
-  const visible = S.view === "app" && !S.dlg && !!host && S.mod[S.cur]?.status !== "unavailable";
+  const visible = S.view === "app" && !S.dlg && !!host && !["unavailable", "host-failed", "host-exited"].includes(S.mod[S.cur]?.status);
   if (ro) { ro.disconnect(); ro = null; }
   if (host) {
     const send = () => {
@@ -392,7 +422,7 @@ function toast(msg, bad = false) {
 
 // ---------- events ----------
 document.addEventListener("click", (e) => {
-  const el = e.target.closest("[data-go],[data-tab],[data-close],[data-dlg],[data-launch],[data-host],[data-add],[data-dlgclose],[data-smoke],[data-set],[data-hide],[data-follow],[data-rescan],[data-demo],[data-fakeadd]");
+  const el = e.target.closest("[data-go],[data-tab],[data-close],[data-dlg],[data-launch],[data-host],[data-add],[data-dlgclose],[data-smoke],[data-set],[data-hide],[data-follow],[data-rescan],[data-fakeadd],[data-updcheck],[data-updrun],[data-updcancel],[data-reopen],[data-checkupd]");
   if (!el) return;
   const d = el.dataset;
   if (d.smoke !== undefined && e.target !== el) return; // clicks inside the dialog
@@ -415,7 +445,15 @@ document.addEventListener("click", (e) => {
   }
   if (d.follow !== undefined) { lastFocus = "[data-follow]"; return setSetting("follow", !S.st.settings.follow); }
   if (d.rescan !== undefined) { S.scanning = true; render(); ipc({ cmd: "rescan" }); return; }
-  if (d.demo !== undefined) return runDemo();
+  if (d.checkupd !== undefined) { lastFocus = "[data-checkupd]"; return setSetting("check_updates", !S.st.settings.check_updates); }
+  if (d.updcheck !== undefined) {
+    if (!d.updcheck) S.lastCheck = new Date();
+    ipc({ cmd: "update-check", app: d.updcheck });
+    return;
+  }
+  if (d.updrun) { ipc({ cmd: "update-run", app: d.updrun }); return; }
+  if (d.updcancel) { ipc({ cmd: "update-cancel", app: d.updcancel }); return; }
+  if (d.reopen) return reopen(d.reopen);
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && S.dlg) { S.dlg = null; render(); return; }
@@ -428,17 +466,15 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// The update demo animates the fixture row and sends update-progress to a hosted InstaWords.
-function runDemo() {
-  let p = 0;
-  const step = () => {
-    p = Math.min(1, p + 0.05);
-    S.demo = p;
-    ipc({ cmd: "update-demo", app: "instawords", state: p < 0.8 ? "downloading" : p < 1 ? "installing" : "done", ...(p < 1 ? { progress: p } : {}) });
-    if (S.view === "updates") render();
-    if (p < 1) setTimeout(step, 150); else setTimeout(() => { S.demo = null; }, 4000);
-  };
-  step();
+// "Reopen" after an update: restart the hosted copy, or open the app in its own window.
+function reopen(id) {
+  if (canHost(id)) {
+    if (S.open.includes(id)) { ipc({ cmd: "close-module", app: id }); delete S.mod[id]; }
+    openHosted(id);
+    return;
+  }
+  const i = installs(id).findIndex((x) => x.launchable);
+  if (i >= 0) ipc({ cmd: "launch", app: id, install: i });
 }
 
 // ---------- messages from FastKiwi.exe ----------
@@ -448,6 +484,7 @@ window.__hub = {
     switch (m.type) {
       case "state":
         S.st = m;
+        S.upd = m.upd ?? {};
         if (m.shot) { S.st.settings = { ...S.st.settings, theme: m.shot.theme, lang: m.shot.lang }; }
         S.scanning = m.detection === null;
         if (!S.scanning) S.scannedAt = new Date();
@@ -472,6 +509,10 @@ window.__hub = {
         else if (m.error !== "busy") toast(m.error === "not installed" ? t.noCopy : t.launchFail(nm), true);
         break;
       }
+      case "update":
+        S.upd[m.app] = m.row;
+        render(); // the Updates screen, and the badge on its tab
+        break;
       case "blocked": toast(t.blocked(m.host), true); break;
       case "proto-error": toast(t.protoErr, true); break;
     }
@@ -485,9 +526,11 @@ async function startShot(shot) {
   await until(() => S.st.detection !== null);
   await document.fonts.ready;
   if (shot.screen.startsWith("app")) {
-    const id = apps().find((a) => canHost(a.id))?.id;
-    if (id) { openHosted(id); await until(() => ["ready", "no-proto", "unavailable", "error"].includes(S.mod[id]?.status), 10000); }
-    const test = shot.screen.split("-")[1]; // app-away | app-bad | app-own: dev self-tests
+    // app:<id> picks the app; plain app (or app-<test>) takes the first that can be hosted.
+    const want = shot.screen.startsWith("app:") ? shot.screen.slice(4) : null;
+    const id = want ?? apps().find((a) => canHost(a.id))?.id;
+    if (id) { openHosted(id); await until(() => ["ready", "no-proto", "unavailable", "error", "host-failed", "host-exited"].includes(S.mod[id]?.status), 10000); }
+    const test = want ? null : shot.screen.split("-")[1]; // app-away | app-bad | app-own: dev self-tests
     if (id && test) { ipc({ cmd: "dev-click", app: id, el: test }); await new Promise((r) => setTimeout(r, 1500)); }
   } else if (shot.screen === "launch") {
     const b = document.querySelector("[data-launch]:not([disabled])");
@@ -495,6 +538,21 @@ async function startShot(shot) {
   } else if (shot.screen === "add") {
     const a = apps().find((x) => !isInstalled(x.id) && x.id === "instawords") ?? apps().find((x) => !isInstalled(x.id));
     if (a) { S.dlg = { kind: "add", app: a.id }; render(); }
+  } else if (shot.screen.startsWith("updates-")) {
+    // updates-check: run every app's --hub-update --check-only; updates-run: then update the
+    // first app that has one (the shot is taken mid-run when the app is slow enough).
+    go("updates");
+    const running = () => Object.values(S.upd).some((r) => r.running);
+    S.lastCheck = new Date();
+    ipc({ cmd: "update-check", app: "" });
+    await until(() => Object.keys(S.upd).length > 0 && !running(), 10000);
+    const id = Object.keys(S.upd).find((k) => S.upd[k].state === "available");
+    if (shot.screen === "updates-run" && id) {
+      ipc({ cmd: "update-run", app: id });
+      await until(() => ["downloading", "installing"].includes(S.upd[id]?.state), 10000);
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    render();
   } else if (shot.screen !== "home") {
     go(shot.screen);
   }

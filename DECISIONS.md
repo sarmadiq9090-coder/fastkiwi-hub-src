@@ -180,3 +180,57 @@ Other rules:
   - A test fails if the file changes without a new release entry.
   - The SPDX header is `LicenseRef-Proprietary`, matching `Cargo.toml` (D-051: closed source).
 - **Reason.** One reviewed adapter in all apps, so a fix in one place is a fix everywhere. The harness can prove that an app ships it unchanged.
+
+## D-H23 The Hub may start an app with pipes, but only for a hub command
+
+- **Context.** Phase C allowed only ShellExecute and forget (D-H05, REVIEW-V2 §12.2). `--hub-host` and `--hub-update` need stdin and stdout pipes.
+- **Decision.** `src/hostproc.rs` is the only file that may start a process with pipes. Its limits:
+  - it starts only the exe that detection found;
+  - it runs only after that copy's `fastkiwi-hub.json` declared the command;
+  - it passes only the contract's flags;
+  - stdin and stdout are pipes, stderr goes to `NUL`, and it uses `CREATE_NO_WINDOW`.
+- **What stays the same.** Standalone launches remain ShellExecute and forget. There is still no Job object.
+- **Shutdown.** The Hub ends only processes it started itself. Closing a tab closes stdin; if the process is still running 5 s later, the Hub terminates it. An update is never terminated while it is `installing`.
+- **Guards.** `tests/guards.rs` enforces this. `Command::new`, `.args(` and the flags each appear once, in that file only.
+- **Council.** 5 of 5. The security seat accepted it on two conditions: the guard test above, and that the Hub never passes a path that came from a page or a message.
+
+## D-H24 Store copies are not driven before spike S1
+
+- **Problem.** A Store app started by its path in `WindowsApps` has no package identity, so `StoreContext` fails. That folder is also not meant to be started from directly. The right route is the app execution alias (spike S1).
+- **Why not now.** None of our Store packages is installed on this PC, so the alias route cannot be tested here.
+- **Decision for Hub 0.2.0.** A Store copy keeps its Phase C behaviour: it opens in its own window, and the Updates screen says «يُحدَّث في المتجر حتى المرحلة E». Its `fastkiwi-hub.json` is still read and shown. Copies installed by Inno, NSIS or winget, or run portable, are driven fully.
+- **The contract** (§4.6) says so in one informational line. Nothing changes for the apps.
+
+## D-H25 The Updates screen shows real data; the fixture is gone
+
+- **What changed.**
+  - `catalog/updates.fixture.json`, its demo button and the «بيانات تجريبية» note are removed.
+  - Each installed app shows its route:
+    - «هنا»: its copy declares `hub-update`;
+    - «المتجر»;
+    - «إصدار أقدم: يُحدَّث من نافذته»: an older build without the capability file.
+  - The states are read from the app's own `--hub-update` lines: يتحقق، متاح، «يُحدَّث… ٤٥٪» (with «ألغِ» while downloading), تم التحديث with «أعد فتحه», أحدث إصدار, and an error message for each `code`.
+  - Any run that breaks the contract shows `error` `internal`.
+  - The tab badge counts the apps that have an update available.
+- **Consent.**
+  - «تحقق» and «تحقق الآن» only run `--check-only`. Nothing is downloaded until the user presses «حدّث».
+  - The settings switch «التحقق من التحديثات» is now live. It is off by default. When on, the check runs once per Hub start, after detection.
+- **Hosted modules.** A hosted module gets `update-progress` during a full update, and `restart-needed` after `done`.
+- **Council.** 5 of 5. The UX seat asked that an older build is never shown as broken: it updates itself as before, and the screen says so.
+
+## D-H26 Lifetime of a hosted P module, and the fallback
+
+- **One process per open tab.** The Hub shows «يبدأ البرنامج…» until the handshake arrives, then loads the page in the module's own WebView2 profile, on `127.0.0.1:<port>` only.
+- **No valid handshake:** «تعذّر فتحه هنا. افتحه في نافذته.» with the existing «افتح في نافذته» button.
+- **The app exits:** «أُغلق البرنامج. افتحه من جديد.»
+- **No automatic standalone launch.** The user decides; a window appearing by itself after a failure would surprise them.
+- **No capability file:** the card says «يفتح في نافذته» and «افتح» launches the app, as in Phase C. The Phase C label «يفتح هنا لاحقًا، في المرحلة D» is gone.
+
+## D-H27 Dev copies, version 0.2.0, screenshots
+
+- **`--dev-host <id>=<exe>`** (dev mode only) adds that exe as a portable copy, read with the `fastkiwi-hub.json` next to it. This is how `stub-app` stands in for Lemon and Remember Me until their real builds ship hub mode. The shots taken this way are named `*-stub-*`.
+- **New screenshot screens:**
+  - `--screen app:<id>`;
+  - `updates-check`;
+  - `updates-run` (set `FK_STUB_STEP_MS` to slow the stub down).
+- **Version.** The Hub moves to 0.2.0: new features, SemVer minor. All screenshots were captured again from the running app.

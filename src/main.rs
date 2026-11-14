@@ -1,10 +1,14 @@
-//! FastKiwi.exe: the Hub window (Phase C prototype shell).
+//! FastKiwi.exe: the Hub window (Phase D prototype).
 //!
 //! One tao window. The Hub UI is one WebView2 served over the `fastkiwi` custom protocol (no
-//! local HTTP server). A hosted web module gets its own child WebView2 with its own user-data
-//! folder, its own origin (`fkmod.<id>`), a navigation allowlist, no host objects, and only
-//! `fastkiwi-module@1` web messages. Detection is read only; launching is ShellExecute and
-//! forget. No network, no install, no update, no uninstall code.
+//! local HTTP server). A hosted module gets its own child WebView2 with its own user-data
+//! folder, a navigation allowlist, no host objects, and only `fastkiwi-module@1` web messages:
+//! - kind S (web folder): its own origin `fkmod.<id>`, served by the Hub;
+//! - kind P (Phase D): the app's own `--hub-host` page on `127.0.0.1:<port>` (`hostproc`).
+//!
+//! Detection is read only. Standalone launches are ShellExecute and forget. Updates run the
+//! app's own `--hub-update` (fastkiwi-hub-cli@1). The Hub itself has no network, install or
+//! uninstall code.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -23,7 +27,9 @@ mod hub {
     use kiwi_hub::allowlist;
     use kiwi_hub::catalog::{self, App as CatApp, Kind};
     use kiwi_hub::detect::{self, AppDetection};
-    use kiwi_hub::protocol::{self, Digits, HubMsg, Lang, ModuleMsg, Theme, UpdateState};
+    use kiwi_hub::hosting::{self, UpdateRoute};
+    use kiwi_hub::hostproc::{self, HostEvent, HostProcess, UpdateEvent, UpdateHandle};
+    use kiwi_hub::protocol::{self, Digits, HubMsg, Lang, ModuleMsg, Theme};
     use kiwi_hub::serve;
     use kiwi_hub::settings::{self, Settings};
     use kiwi_hub::win::{self, Target};
@@ -53,11 +59,33 @@ mod hub {
     #[derive(Debug)]
     enum Ev {
         HubIpc(String),
-        ModuleIpc { app: String, body: String },
-        ModuleLoaded { app: String, epoch: u64 },
-        ModuleTimeout { app: String, epoch: u64 },
-        Blocked { who: String, host: String },
+        ModuleIpc {
+            app: String,
+            body: String,
+        },
+        ModuleLoaded {
+            app: String,
+            epoch: u64,
+        },
+        ModuleTimeout {
+            app: String,
+            epoch: u64,
+        },
+        Blocked {
+            who: String,
+            host: String,
+        },
         Detected(Vec<AppDetection>),
+        Host {
+            app: String,
+            epoch: u64,
+            ev: HostEvent,
+        },
+        Update {
+            app: String,
+            run: u64,
+            ev: UpdateEvent,
+        },
         ShotNow,
         ShotTimeout,
     }
@@ -69,6 +97,9 @@ mod hub {
         catalog: Option<PathBuf>,
         detect_json: Option<PathBuf>,
         shot: Option<Shot>,
+        /// `--dev-host <id>=<exe>`: treat that exe (and the `fastkiwi-hub.json` next to it) as a
+        /// portable copy of the app, e.g. `stub-app.exe` from `tools/conformance`.
+        dev_hosts: Vec<(String, PathBuf)>,
     }
 
     #[derive(Debug, Clone)]
@@ -86,6 +117,7 @@ mod hub {
             catalog: None,
             detect_json: None,
             shot: None,
+            dev_hosts: Vec::new(),
         };
         let mut it = std::env::args().skip(1);
         let (mut screen, mut theme, mut lang, mut out) = (
@@ -106,6 +138,14 @@ mod hub {
                     a.catalog = it.next().map(PathBuf::from);
                 }
                 "--detect-json" => a.detect_json = it.next().map(PathBuf::from),
+                "--dev-host" => {
+                    a.dev = true;
+                    if let Some((id, exe)) = it.next().as_deref().and_then(|v| v.split_once('='))
+                        && catalog::valid_id(id)
+                    {
+                        a.dev_hosts.push((id.to_string(), PathBuf::from(exe)));
+                    }
+                }
                 "--dev-shot" => out = it.next().map(PathBuf::from),
                 "--screen" => screen = it.next().unwrap_or(screen),
                 "--theme" => theme = it.next().unwrap_or(theme),
@@ -131,6 +171,8 @@ mod hub {
         DevDir { root: PathBuf, entry: String },
         /// The small stub module compiled into the Hub (dev only).
         Stub,
+        /// A kind P app's own `--hub-host` page.
+        Process { port: u16 },
     }
 
     impl ModuleSource {
@@ -139,6 +181,7 @@ mod hub {
                 ModuleSource::Installed { .. } => "installed",
                 ModuleSource::DevDir { .. } => "dev-dir",
                 ModuleSource::Stub => "stub",
+                ModuleSource::Process { .. } => "process",
             }
         }
         fn entry(&self) -> String {
@@ -146,7 +189,7 @@ mod hub {
                 ModuleSource::Installed { entry, .. } | ModuleSource::DevDir { entry, .. } => {
                     entry.clone()
                 }
-                ModuleSource::Stub => "index.html".into(),
+                ModuleSource::Stub | ModuleSource::Process { .. } => "index.html".into(),
             }
         }
     }
@@ -171,10 +214,26 @@ mod hub {
         epoch: u64,
         bounds: (f64, f64, f64, f64),
         module_visible: bool,
+        /// The app whose tab is in front (a module view built later must not cover another).
+        shown_app: String,
         last_launch: HashMap<String, Instant>,
         proxy: EventLoopProxy<Ev>,
-        updates: Value,
+        /// `--hub-host` processes, by app id, with the epoch of the tab that started them.
+        hosts: HashMap<String, (u64, HostProcess)>,
+        /// Running `--hub-update` runs, by app id.
+        runs: HashMap<String, Run>,
+        run_seq: u64,
+        /// The last update state per app (the Updates screen).
+        upd: HashMap<String, Value>,
+        /// Each app's update check runs at most once per Hub start by itself (setting on).
+        auto_checked: bool,
         shot_tries: u32,
+    }
+
+    struct Run {
+        id: u64,
+        check_only: bool,
+        handle: UpdateHandle,
     }
 
     fn respond(
@@ -239,6 +298,7 @@ mod hub {
                     .map(Cow::Owned)
             }
             ModuleSource::Stub => serve::stub_file(&rel).map(Cow::Borrowed),
+            ModuleSource::Process { .. } => None,
         };
         match body {
             Some(b) => respond(StatusCode::OK, serve::mime(&rel), csp, b),
@@ -393,10 +453,19 @@ mod hub {
                         .map(|x| {
                             let mut v = serde_json::to_value(x).unwrap_or(Value::Null);
                             if let Value::Object(o) = &mut v {
+                                let label = self
+                                    .module_source(&x.id)
+                                    .map(|s| s.label())
+                                    .or_else(|| self.host_install(&x.id).map(|_| "process"));
                                 o.insert(
                                     "module".into(),
-                                    self.module_source(&x.id)
-                                        .map(|s| Value::String(s.label().into()))
+                                    label
+                                        .map(|l| Value::String(l.into()))
+                                        .unwrap_or(Value::Null),
+                                );
+                                o.insert(
+                                    "update".into(),
+                                    serde_json::to_value(hosting::update_route(&x.installs))
                                         .unwrap_or(Value::Null),
                                 );
                             }
@@ -429,7 +498,7 @@ mod hub {
                 "apps": apps,
                 "detection": self.detection_json(),
                 "settings": self.settings,
-                "updates": self.updates,
+                "upd": self.upd,
                 "shot": self.args.shot.as_ref().map(|s| json!({"screen": s.screen, "theme": s.theme, "lang": s.lang})),
             })
         }
@@ -464,41 +533,139 @@ mod hub {
             self.installs(id).iter().position(|i| i.launchable)
         }
 
+        /// The copy of a kind P app to run with `--hub-host`, if any declares it.
+        fn host_install(&self, id: &str) -> Option<usize> {
+            hosting::host_install(self.app(id)?, self.installs(id))
+        }
+
         fn open_module(&mut self, id: &str) {
+            self.shown_app = id.to_string();
             if let Some(m) = self.modules.get(id) {
                 let _ = m.webview.set_visible(true);
                 self.module_visible = true;
                 self.send_ui(json!({"type": "module", "app": id, "status": if m.ready { "ready" } else { "loading" }, "source": m.source.label()}));
                 return;
             }
-            let Some(source) = self.module_source(id) else {
+            if self.hosts.contains_key(id) {
+                self.send_ui(
+                    json!({"type": "module", "app": id, "status": "starting", "source": "process"}),
+                );
+                return;
+            }
+            if let Some(source) = self.module_source(id) {
+                self.epoch += 1;
+                let url = allowlist::module_start_url(id, &source.entry());
+                self.module_visible = true;
+                self.build_module_view(id, source, url, self.epoch);
+                return;
+            }
+            let Some(idx) = self.host_install(id) else {
                 self.send_ui(json!({"type": "module", "app": id, "status": "unavailable"}));
+                return;
+            };
+            let Some(exe) = self.installs(id)[idx].exe.clone() else {
                 return;
             };
             self.epoch += 1;
             let epoch = self.epoch;
+            let p = self.proxy.clone();
+            let app = id.to_string();
+            match HostProcess::start(
+                std::path::Path::new(&exe),
+                id,
+                hubcli::HANDSHAKE_TIMEOUT,
+                move |ev| {
+                    let _ = p.send_event(Ev::Host {
+                        app: app.clone(),
+                        epoch,
+                        ev,
+                    });
+                },
+            ) {
+                Ok(proc) => {
+                    self.hosts.insert(id.to_string(), (epoch, proc));
+                    self.module_visible = true;
+                    self.send_ui(json!({"type": "module", "app": id, "status": "starting", "source": "process"}));
+                }
+                Err(e) => {
+                    self.trace(&format!("{id}: --hub-host did not start: {e}"));
+                    self.send_ui(json!({"type": "module", "app": id, "status": "host-failed"}));
+                }
+            }
+        }
+
+        fn trace(&self, msg: &str) {
+            if self.args.dev || std::env::var_os("FASTKIWI_TRACE").is_some() {
+                eprintln!("{msg}");
+            }
+        }
+
+        fn on_host(&mut self, app: &str, epoch: u64, ev: HostEvent) {
+            if self.hosts.get(app).map(|(e, _)| *e) != Some(epoch) {
+                return; // from a tab that was closed in the meantime
+            }
+            match ev {
+                HostEvent::Ready(h) => {
+                    if !self.modules.contains_key(app) {
+                        self.build_module_view(
+                            app,
+                            ModuleSource::Process { port: h.port },
+                            h.enter_url(),
+                            epoch,
+                        );
+                    }
+                }
+                HostEvent::Failed(f) => {
+                    self.trace(&format!("{app}: no valid handshake: {f:?}"));
+                    self.hosts.remove(app);
+                    self.send_ui(json!({"type": "module", "app": app, "status": "host-failed"}));
+                }
+                HostEvent::Exited(code) => {
+                    self.trace(&format!("{app}: --hub-host exited ({code:?})"));
+                    self.hosts.remove(app);
+                    if self.modules.get(app).is_some_and(|m| m.epoch == epoch) {
+                        self.modules.remove(app);
+                    }
+                    self.send_ui(json!({"type": "module", "app": app, "status": "host-exited"}));
+                }
+            }
+        }
+
+        /// The child WebView for a module: own profile, allowlist, no host objects, the
+        /// embed.js marker (D-H18), web messages only from its own origin.
+        fn build_module_view(&mut self, id: &str, source: ModuleSource, url: String, epoch: u64) {
             let mut ctx = WebContext::new(Some(data_dir(&format!("module-{id}"))));
             let (x, y, w, h) = self.bounds;
-            let src = source.clone();
-            let sid = id.to_string();
             let nav_id = id.to_string();
             let p_nav = self.proxy.clone();
             let p_ipc = self.proxy.clone();
             let p_load = self.proxy.clone();
             let ipc_id = id.to_string();
             let load_id = id.to_string();
-            let origin = format!("https://{}/", allowlist::module_host(id));
-            let built = WebViewBuilder::new_with_web_context(&mut ctx)
-                .with_custom_protocol(allowlist::MODULE_SCHEME.into(), move |_, req| {
+            let (origin, port) = match &source {
+                ModuleSource::Process { port } => (allowlist::process_origin(*port), Some(*port)),
+                _ => (format!("https://{}/", allowlist::module_host(id)), None),
+            };
+            let mut b = WebViewBuilder::new_with_web_context(&mut ctx);
+            if port.is_none() {
+                let src = source.clone();
+                let sid = id.to_string();
+                b = b.with_custom_protocol(allowlist::MODULE_SCHEME.into(), move |_, req| {
                     serve_module(&sid, &src, req)
-                })
-                .with_url(allowlist::module_start_url(id, &source.entry()))
+                });
+            }
+            let built = b
+                .with_initialization_script(hosting::marker_script(id))
+                .with_url(url)
                 .with_bounds(Rect {
                     position: LogicalPosition::new(x, y).into(),
                     size: LogicalSize::new(w.max(1.0), h.max(1.0)).into(),
                 })
                 .with_navigation_handler(move |url| {
-                    let ok = allowlist::module_nav_allowed(&url, &nav_id);
+                    let ok = match port {
+                        Some(p) => allowlist::process_nav_allowed(&url, p),
+                        None => allowlist::module_nav_allowed(&url, &nav_id),
+                    };
                     if !ok {
                         let _ = p_nav.send_event(Ev::Blocked {
                             who: nav_id.clone(),
@@ -536,7 +703,7 @@ mod hub {
             match built {
                 Ok(webview) => {
                     harden(&webview, self.args.dev, false);
-                    self.module_visible = true;
+                    let _ = webview.set_visible(self.module_visible && self.shown_app == id);
                     self.send_ui(json!({"type": "module", "app": id, "status": "loading", "source": source.label()}));
                     self.modules.insert(
                         id.to_string(),
@@ -552,6 +719,150 @@ mod hub {
                 Err(e) => {
                     self.send_ui(json!({"type": "module", "app": id, "status": "error", "error": e.to_string()}));
                 }
+            }
+        }
+
+        fn close_module(&mut self, id: &str) {
+            self.modules.remove(id);
+            if let Some((_, p)) = self.hosts.remove(id) {
+                p.stop_with(hostproc::STOP_GRACE);
+            }
+        }
+
+        /// Start `--hub-update [--check-only]` for `id`, if its copy declares it and no run
+        /// for it is going.
+        fn start_update(&mut self, id: &str, check_only: bool) {
+            if self.runs.contains_key(id) {
+                return;
+            }
+            let UpdateRoute::Hub(idx) = hosting::update_route(self.installs(id)) else {
+                return;
+            };
+            let Some(exe) = self.installs(id)[idx].exe.clone() else {
+                return;
+            };
+            self.run_seq += 1;
+            let run = self.run_seq;
+            let p = self.proxy.clone();
+            let app = id.to_string();
+            match hostproc::start_update(
+                std::path::Path::new(&exe),
+                check_only,
+                self.window.hwnd(),
+                hostproc::UpdateTiming::default(),
+                move |ev| {
+                    let _ = p.send_event(Ev::Update {
+                        app: app.clone(),
+                        run,
+                        ev,
+                    });
+                },
+            ) {
+                Ok(handle) => {
+                    self.runs.insert(
+                        id.to_string(),
+                        Run {
+                            id: run,
+                            check_only,
+                            handle,
+                        },
+                    );
+                    self.set_upd(id, json!({"state": "checking"}), check_only, true);
+                }
+                Err(e) => {
+                    self.trace(&format!("{id}: --hub-update did not start: {e}"));
+                    self.set_upd(
+                        id,
+                        json!({"state": "error", "code": "internal"}),
+                        check_only,
+                        false,
+                    );
+                }
+            }
+        }
+
+        fn set_upd(&mut self, id: &str, mut v: Value, check_only: bool, running: bool) {
+            if let Value::Object(o) = &mut v {
+                o.remove("proto");
+                o.insert("check_only".into(), Value::Bool(check_only));
+                o.insert("running".into(), Value::Bool(running));
+            }
+            self.upd.insert(id.to_string(), v.clone());
+            self.send_ui(json!({"type": "update", "app": id, "row": v}));
+        }
+
+        fn on_update(&mut self, app: &str, run: u64, ev: UpdateEvent) {
+            let Some(check_only) = self
+                .runs
+                .get(app)
+                .filter(|r| r.id == run)
+                .map(|r| r.check_only)
+            else {
+                return;
+            };
+            let (line, running) = match ev {
+                UpdateEvent::Line(l) => (l, true),
+                UpdateEvent::End(end) => {
+                    if let hostproc::UpdateEnd::Broken(why) = &end {
+                        self.trace(&format!("{app}: --hub-update broke the contract: {why}"));
+                    }
+                    self.runs.remove(app);
+                    (end.shown(), false)
+                }
+            };
+            // A final line arrives twice (as a line, then as the end): forward it once.
+            let forward = if running {
+                !line.state.is_final()
+            } else {
+                true
+            };
+            if !check_only
+                && forward
+                && let Some(m) = self.modules.get(app).filter(|m| m.ready)
+            {
+                for msg in hosting::module_msgs(&line, true) {
+                    post(&m.webview, &msg);
+                }
+            }
+            let v = serde_json::to_value(&line).unwrap_or(Value::Null);
+            // "running" ends only with the run itself, so a new run is never refused as busy.
+            self.set_upd(app, v, check_only, running);
+        }
+
+        fn check_all(&mut self) {
+            let ids: Vec<String> = self.apps.iter().map(|a| a.id.clone()).collect();
+            for id in ids {
+                self.start_update(&id, true);
+            }
+        }
+
+        /// `--dev-host <id>=<exe>`: add that exe as a portable copy (dev only).
+        fn add_dev_hosts(&self, d: &mut [AppDetection]) {
+            for (id, exe) in &self.args.dev_hosts {
+                let Some(x) = d.iter_mut().find(|x| &x.id == id) else {
+                    continue;
+                };
+                let dir = exe.parent().map(PathBuf::from).unwrap_or_default();
+                let hub = std::fs::read_to_string(dir.join(hubcli::APP_MANIFEST))
+                    .ok()
+                    .and_then(|t| hubcli::parse_app_manifest(&t, Some(id)).ok())
+                    .map(|m| m.commands);
+                x.installs.insert(
+                    0,
+                    detect::Install {
+                        source: detect::Source::Portable,
+                        version: None,
+                        size_bytes: std::fs::metadata(exe).ok().map(|m| m.len()),
+                        location: dir.display().to_string(),
+                        exe: Some(exe.display().to_string()),
+                        aumid: None,
+                        launchable: exe.is_file(),
+                        web_entry: None,
+                        found_by: "dev-host",
+                        hub,
+                    },
+                );
+                x.used_before = false;
             }
         }
 
@@ -631,13 +942,12 @@ mod hub {
                     }
                     self.open_module(&id);
                 }
-                "close-module" => {
-                    self.modules.remove(&s("app"));
-                }
+                "close-module" => self.close_module(&s("app")),
                 "module-visible" => {
                     let vis = v.get("visible").and_then(Value::as_bool).unwrap_or(false);
                     let app = s("app");
                     self.module_visible = vis;
+                    self.shown_app = app.clone();
                     for (k, m) in &self.modules {
                         let _ = m.webview.set_visible(vis && *k == app);
                     }
@@ -664,15 +974,18 @@ mod hub {
                         }
                     }
                 }
-                "update-demo" => {
-                    let state: UpdateState =
-                        serde_json::from_value(v["state"].clone()).unwrap_or(UpdateState::Checking);
-                    let progress = v.get("progress").and_then(Value::as_f64);
-                    let msg = HubMsg::UpdateProgress { state, progress };
-                    if protocol::parse_hub_msg(&protocol::encode_hub_msg(&msg)).is_ok()
-                        && let Some(m) = self.modules.get(&s("app")).filter(|m| m.ready)
-                    {
-                        post(&m.webview, &msg);
+                "update-check" => {
+                    let id = s("app");
+                    if id.is_empty() {
+                        self.check_all();
+                    } else {
+                        self.start_update(&id, true);
+                    }
+                }
+                "update-run" => self.start_update(&s("app"), false),
+                "update-cancel" => {
+                    if let Some(r) = self.runs.get(&s("app")) {
+                        r.handle.cancel();
                     }
                 }
                 // Dev self-test only: press one of the stub module's own test buttons.
@@ -720,10 +1033,19 @@ mod hub {
                 Ev::Blocked { who, host } => {
                     self.send_ui(json!({"type": "blocked", "app": who, "host": host}));
                 }
-                Ev::Detected(d) => {
+                Ev::Detected(mut d) => {
+                    self.add_dev_hosts(&mut d);
                     self.detection = Some(d);
                     self.send_ui(json!({"type": "detection", "detection": self.detection_json()}));
+                    // The update check runs once per start, and only if the user turned it on.
+                    if self.settings.check_updates && !self.auto_checked && self.args.shot.is_none()
+                    {
+                        self.auto_checked = true;
+                        self.check_all();
+                    }
                 }
+                Ev::Host { app, epoch, ev } => self.on_host(&app, epoch, ev),
+                Ev::Update { app, run, ev } => self.on_update(&app, run, ev),
                 Ev::ShotNow => {
                     if let Some(s) = &self.args.shot {
                         self.window.set_minimized(false);
@@ -855,9 +1177,14 @@ mod hub {
             epoch: 0,
             bounds: (0.0, 92.0, 1366.0, 676.0),
             module_visible: false,
+            shown_app: String::new(),
             last_launch: HashMap::new(),
             proxy,
-            updates: serde_json::from_str(catalog::UPDATES_FIXTURE).unwrap_or(Value::Null),
+            hosts: HashMap::new(),
+            runs: HashMap::new(),
+            run_seq: 0,
+            upd: HashMap::new(),
+            auto_checked: false,
             shot_tries: 0,
         };
 

@@ -215,38 +215,8 @@ fn type_fields(ty: &str) -> &'static [&'static str] {
     }
 }
 
-/// SemVer 2.0.0 core with optional pre-release and build metadata.
-pub fn is_semver(v: &str) -> bool {
-    if v.len() > 64 {
-        return false;
-    }
-    let (rest, build) = match v.split_once('+') {
-        Some((r, b)) => (r, Some(b)),
-        None => (v, None),
-    };
-    let (core, pre) = match rest.split_once('-') {
-        Some((c, p)) => (c, Some(p)),
-        None => (rest, None),
-    };
-    let nums: Vec<&str> = core.split('.').collect();
-    let num_ok = |n: &str| {
-        !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && (n == "0" || !n.starts_with('0'))
-    };
-    let ident_ok = |s: &str| {
-        !s.is_empty()
-            && s.split('.')
-                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
-    };
-    nums.len() == 3
-        && nums.iter().all(|n| num_ok(n))
-        && pre.is_none_or(|p| {
-            ident_ok(p)
-                && p.split('.').all(|id| {
-                    !id.bytes().all(|b| b.is_ascii_digit()) || id == "0" || !id.starts_with('0')
-                })
-        })
-        && build.is_none_or(ident_ok)
-}
+/// SemVer 2.0.0 (shared with fastkiwi-hub-cli@1).
+pub use hubcli::is_semver;
 
 /// Parse a message a module sent to the Hub. `expected_module` is the id of the module the
 /// sending WebView hosts; a `ready` that names another module is refused.

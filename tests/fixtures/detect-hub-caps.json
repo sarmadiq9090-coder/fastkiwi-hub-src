@@ -1,0 +1,35 @@
+{
+  "_comment": "Phase D: which copies declare hub commands in fastkiwi-hub.json. Lemon portable: a valid file. InstaFind: a file that names another app (refused). InstaWords: a Store copy with a valid file (not driven until spike S1) and an Inno copy with a broken file. Remember Me: update and export only.",
+  "env": {
+    "LOCALAPPDATA": "C:\\Users\\T\\AppData\\Local",
+    "APPDATA": "C:\\Users\\T\\AppData\\Roaming",
+    "USERPROFILE": "C:\\Users\\T",
+    "PROGRAMFILES": "C:\\Program Files"
+  },
+  "files": {
+    "C:\\Users\\T\\AppData\\Local\\Programs\\LocalAiChat\\local-ai-chat.exe": { "size": 9210368, "version": "2.3.0" },
+    "C:\\Users\\T\\AppData\\Local\\Programs\\InstaFind\\bahth.exe": { "size": 6873600 },
+    "C:\\Users\\T\\AppData\\Local\\Programs\\InstaWords\\InstaWords.exe": { "size": 4000000, "version": "3.0.0" },
+    "C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\Remember Me.exe": { "size": 249866240, "version": "1.7.0" }
+  },
+  "registry": {
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1": {
+      "DisplayVersion": "3.0.0",
+      "InstallLocation": "C:\\Users\\T\\AppData\\Local\\Programs\\InstaWords\\"
+    },
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\a92ab8ea-9a18-5b57-8667-052d208c8425": {
+      "DisplayVersion": "1.7.0",
+      "UninstallString": "\"C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\Uninstall Remember Me.exe\" /currentuser"
+    }
+  },
+  "packages": {
+    "FastKiwi.InstaWords_sm1xjmj6v76yc": { "version": "3.0.1.0", "location": "C:\\Program Files\\WindowsApps\\FastKiwi.InstaWords_3.0.1.0_x64__sm1xjmj6v76yc" }
+  },
+  "texts": {
+    "C:\\Users\\T\\AppData\\Local\\Programs\\LocalAiChat\\fastkiwi-hub.json": "{\"proto\":\"fastkiwi-hub-cli@1\",\"app\":\"lemon\",\"commands\":[\"hub-host\",\"hub-update\",\"export-data\"]}",
+    "C:\\Users\\T\\AppData\\Local\\Programs\\InstaFind\\fastkiwi-hub.json": "{\"proto\":\"fastkiwi-hub-cli@1\",\"app\":\"lemon\",\"commands\":[\"hub-host\"]}",
+    "C:\\Users\\T\\AppData\\Local\\Programs\\InstaWords\\fastkiwi-hub.json": "{\"proto\":\"fastkiwi-hub-cli@1\",\"app\":\"instawords\",\"commands\":[\"hub-update\",]}",
+    "C:\\Program Files\\WindowsApps\\FastKiwi.InstaWords_3.0.1.0_x64__sm1xjmj6v76yc\\fastkiwi-hub.json": "{\"proto\":\"fastkiwi-hub-cli@1\",\"app\":\"instawords\",\"commands\":[\"hub-update\",\"export-data\"]}",
+    "C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\fastkiwi-hub.json": "\ufeff{\"proto\":\"fastkiwi-hub-cli@1\",\"app\":\"remember-me\",\"commands\":[\"hub-update\",\"export-data\"]}"
+  }
+}

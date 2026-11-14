@@ -35,6 +35,8 @@ struct Raw {
     packages: BTreeMap<String, RawPackage>,
     #[serde(default)]
     dir_sizes: BTreeMap<String, u64>,
+    #[serde(default)]
+    texts: BTreeMap<String, String>,
     #[serde(default, rename = "_comment")]
     _comment: Option<String>,
 }
@@ -63,6 +65,7 @@ pub struct FixtureView {
     registry: BTreeMap<(Hive, String), BTreeMap<String, RegValue>>,
     packages: BTreeMap<String, PackageFacts>,
     dir_sizes: BTreeMap<String, u64>,
+    texts: BTreeMap<String, String>,
 }
 
 impl FixtureView {
@@ -127,6 +130,7 @@ impl FixtureView {
                 .into_iter()
                 .map(|(k, v)| (norm(&k), v))
                 .collect(),
+            texts: raw.texts.into_iter().map(|(k, v)| (norm(&k), v)).collect(),
         })
     }
 }
@@ -152,5 +156,8 @@ impl SystemView for FixtureView {
     }
     fn dir_size(&self, path: &str) -> Option<u64> {
         self.dir_sizes.get(&norm(path)).copied()
+    }
+    fn read_text(&self, path: &str) -> Option<String> {
+        self.texts.get(&norm(path)).cloned()
     }
 }

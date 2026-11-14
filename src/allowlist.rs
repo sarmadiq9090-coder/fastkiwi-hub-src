@@ -80,3 +80,24 @@ pub fn module_nav_allowed(url: &str, app_id: &str) -> bool {
 pub fn hub_nav_allowed(url: &str) -> bool {
     is_allowed(url, HUB_HOST) || is_custom_form(url, HUB_SCHEME, "hub")
 }
+
+/// May the WebView hosting a process module (kind P, `--hub-host`) navigate to `url`? Only
+/// `http://127.0.0.1:<port>/…` of the port its own handshake gave, with no user info.
+pub fn process_nav_allowed(url: &str, port: u16) -> bool {
+    if url == "about:blank" {
+        return true;
+    }
+    let Ok(u) = url::Url::parse(url) else {
+        return false;
+    };
+    u.scheme() == "http"
+        && u.username().is_empty()
+        && u.password().is_none()
+        && u.host_str() == Some("127.0.0.1")
+        && u.port() == Some(port)
+}
+
+/// The origin prefix web messages from a process module must come from.
+pub fn process_origin(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/")
+}
