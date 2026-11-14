@@ -204,9 +204,7 @@ pub fn valid_pfn(pfn: &str) -> bool {
 }
 
 fn valid_app_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 64
-        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.')
+    !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.')
 }
 
 /// A catalog path: `%ROOT%\` + relative segments, no `..`, no `:` after the root.
@@ -367,7 +365,10 @@ pub fn parse(json: &str) -> Result<Catalog, CatalogError> {
                 why,
             };
             if !valid_catalog_path(&hub.data_dir) {
-                return Err(bad(format!("data_dir {:?} is not %ROOT%\\...", hub.data_dir)));
+                return Err(bad(format!(
+                    "data_dir {:?} is not %ROOT%\\...",
+                    hub.data_dir
+                )));
             }
             if hub.detect.is_empty() {
                 return Err(bad("no detect probes".into()));

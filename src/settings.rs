@@ -72,7 +72,8 @@ impl Settings {
 
 /// `%LOCALAPPDATA%\FastKiwi\Hub`, the Hub's own folder (settings and WebView2 profiles).
 pub fn hub_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|d| std::path::PathBuf::from(d).join("FastKiwi").join("Hub"))
+    std::env::var_os("LOCALAPPDATA")
+        .map(|d| std::path::PathBuf::from(d).join("FastKiwi").join("Hub"))
 }
 
 pub fn load() -> Settings {
@@ -86,6 +87,9 @@ pub fn save(s: &Settings) -> std::io::Result<()> {
     let dir = hub_dir().ok_or_else(|| std::io::Error::other("no LOCALAPPDATA"))?;
     std::fs::create_dir_all(&dir)?;
     let tmp = dir.join("settings.json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(s).map_err(std::io::Error::other)?)?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_vec_pretty(s).map_err(std::io::Error::other)?,
+    )?;
     std::fs::rename(tmp, dir.join("settings.json"))
 }

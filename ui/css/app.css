@@ -1,0 +1,62 @@
+/* FastKiwi Hub prototype: what the running app needs on top of the mockup styles (base.css,
+   council.css, hub.css). Same tokens, 4/8 px grid, 40 px targets, one focus ring. */
+
+#app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.surface { border-top: 0; }
+
+/* Open-app tabs: a link plus its own close button (no button inside a link). */
+.apptabs .tabw { display: inline-flex; align-items: center; height: 36px; border-radius: 6px; position: relative; }
+.apptabs .tabw a { height: 36px; padding-inline: 10px 4px; }
+.apptabs .tabw.on { background: var(--subtle-2); }
+.apptabs .tabw.on a { color: var(--text); font-weight: 600; }
+.apptabs .tabw.on::after { content: ""; position: absolute; bottom: 0; inset-inline: calc(50% - 8px); height: 3px; border-radius: 2px; background: var(--accent); }
+.apptabs .x { border: 0; background: transparent; padding: 0; margin-inline-end: 6px; width: 24px; height: 24px; cursor: pointer; }
+.apptabs .x:hover { background: var(--subtle-2); color: var(--text); }
+.tabs a:focus-visible, .apptabs a:focus-visible, .apptabs .x:focus-visible, .pchip:focus-visible, .ibtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* Segmented controls and switches are real buttons. */
+.seg .segb { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 13px; color: var(--text-2); border: 0; background: transparent; cursor: pointer; min-width: 40px; justify-content: center; }
+.seg .segb.on { background: var(--layer-solid); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card), 0 0 0 1px var(--stroke); }
+.seg .segb:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+button.toggle { border: 0; padding: 0; cursor: pointer; }
+button.toggle.off { border: 1px solid var(--text-2); }
+button.toggle:disabled { opacity: .5; cursor: default; }
+button.toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.thm { cursor: pointer; background: var(--layer-solid); color: var(--text); font: inherit; }
+
+.setgrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+
+/* A second copy of the same app (both copies are shown, HUB-DESIGN §4). */
+.app .copy { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); padding: 4px 8px; border-radius: 6px; background: var(--subtle); }
+.app .copy .btn { min-height: 28px; height: 28px; padding: 0 10px; font-size: 12.5px; }
+.app .acts .btn:disabled { cursor: default; }
+
+/* Module host: the child WebView2 is laid exactly over #modhost by FastKiwi.exe. */
+.modbar .chip { height: 26px; }
+.modhost { position: relative; display: grid; place-items: center; }
+.modwait { color: var(--text-3); font-size: 13px; }
+
+.foot { flex-wrap: wrap; }
+.foot .btn.subtle { color: var(--text-2); }
+
+.dlg.small { width: 460px; }
+.dlg .dlgic { width: 48px; height: 48px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.note .grow { flex: 1; }
+.note .btn { flex: none; }
+.warnnote { background: var(--warn-soft); }
+.warnnote svg { color: var(--warn-icon); }
+.smoke { z-index: 40; }
+.toast { z-index: 50; }
+.toast[hidden] { display: none; }
+
+/* Narrow windows (WCAG 1.4.10 reflow): cards and settings stack. */
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .how { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .setgrid { grid-template-columns: 1fr; } .modbar .hosted { display: none; } .appbar .chip.warn { display: none; } }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .thin { display: none; } }
+
+@media (forced-colors: active) {
+  .apptabs .tabw.on::after { background: Highlight; }
+  .seg .segb.on { border: 1px solid Highlight; }
+  button.toggle { border: 1px solid CanvasText; }
+  .app .copy, .note { border: 1px solid CanvasText; }
+}

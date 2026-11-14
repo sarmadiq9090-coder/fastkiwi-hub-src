@@ -49,7 +49,14 @@ pub fn host_of(url: &str) -> String {
     url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_string))
-        .unwrap_or_else(|| url.split(':').next().unwrap_or("").chars().take(16).collect())
+        .unwrap_or_else(|| {
+            url.split(':')
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(16)
+                .collect()
+        })
 }
 
 /// `<scheme>://<host>/...` with no user info or port (the form wry passes before it rewrites).

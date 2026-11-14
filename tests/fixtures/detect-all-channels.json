@@ -1,0 +1,74 @@
+{
+  "_comment": "Synthetic PC with every channel: InstaFind from the Store AND winget (the Links entry points into the Packages folder and the Run value names the same exe, so the winget copy is listed once), InstaWords from Inno with a web folder, Remember Me from the Store AND NSIS (both copies are shown), Lemon nowhere (its exe sits in a folder no probe knows).",
+  "env": {
+    "LOCALAPPDATA": "C:\\Users\\S\\AppData\\Local",
+    "APPDATA": "C:\\Users\\S\\AppData\\Roaming",
+    "USERPROFILE": "C:\\Users\\S",
+    "PROGRAMFILES": "C:\\Program Files"
+  },
+  "packages": {
+    "FastKiwi.InstaFind_sm1xjmj6v76yc": {
+      "version": "1.1.0.0",
+      "location": "C:\\Program Files\\WindowsApps\\FastKiwi.InstaFind_1.1.0.0_x64__sm1xjmj6v76yc"
+    },
+    "FastKiwi.RememberMeReminders_sm1xjmj6v76yc": {
+      "version": "1.6.2.0",
+      "location": "C:\\Program Files\\WindowsApps\\FastKiwi.RememberMeReminders_1.6.2.0_x64__sm1xjmj6v76yc"
+    }
+  },
+  "dir_sizes": {
+    "C:\\Program Files\\WindowsApps\\FastKiwi.InstaFind_1.1.0.0_x64__sm1xjmj6v76yc": 10485760
+  },
+  "files": {
+    "C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Links\\bahth.exe": {
+      "size": 0
+    },
+    "C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Sarmad.InstaFind_Microsoft.Winget.Source_8wekyb3d8bbwe\\bahth.exe": {
+      "size": 7000000,
+      "version": "1.0.9"
+    },
+    "C:\\Users\\S\\AppData\\Local\\Programs\\InstaWords\\InstaWords.exe": {
+      "size": 2500000,
+      "version": "3.0.0"
+    },
+    "C:\\Users\\S\\AppData\\Local\\Programs\\InstaWords\\web\\index.html": {
+      "size": 9000
+    },
+    "C:\\Users\\S\\AppData\\Local\\Programs\\Remember Me\\Remember Me.exe": {
+      "size": 249866240,
+      "version": "1.6.1"
+    },
+    "D:\\Tools\\Lemon\\local-ai-chat.exe": {
+      "size": 9210368,
+      "version": "2.2.0"
+    }
+  },
+  "links": {
+    "C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Links\\bahth.exe": "C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Sarmad.InstaFind_Microsoft.Winget.Source_8wekyb3d8bbwe\\bahth.exe"
+  },
+  "dirs": {
+    "C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Packages": [
+      "Sarmad.InstaFind_Microsoft.Winget.Source_8wekyb3d8bbwe",
+      "Sarmad.InstaFindOld_x"
+    ]
+  },
+  "registry": {
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1": {
+      "DisplayName": "InstaWords",
+      "DisplayVersion": "3.0.0",
+      "InstallLocation": "C:\\Users\\S\\AppData\\Local\\Programs\\InstaWords\\",
+      "EstimatedSize": 3100
+    },
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\a92ab8ea-9a18-5b57-8667-052d208c8425": {
+      "DisplayVersion": "1.6.1",
+      "EstimatedSize": "328105",
+      "UninstallString": "\"C:\\Users\\S\\AppData\\Local\\Programs\\Remember Me\\Uninstall Remember Me.exe\" /currentuser"
+    },
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run": {
+      "BahthSari": "\"C:\\Users\\S\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Sarmad.InstaFind_Microsoft.Winget.Source_8wekyb3d8bbwe\\bahth.exe\" --startup"
+    },
+    "HKCU\\Software\\BahthSari": {
+      "Language": "ar"
+    }
+  }
+}

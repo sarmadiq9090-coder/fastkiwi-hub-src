@@ -75,8 +75,7 @@ pub fn clean_rel_path(url_path: &str, default: &str) -> Option<String> {
     }
     let mut segs = Vec::new();
     for seg in trimmed.split('/') {
-        if seg.is_empty() || seg == "." || seg == ".." || seg.ends_with('.') || seg.ends_with(' ')
-        {
+        if seg.is_empty() || seg == "." || seg == ".." || seg.ends_with('.') || seg.ends_with(' ') {
             return None;
         }
         segs.push(seg);

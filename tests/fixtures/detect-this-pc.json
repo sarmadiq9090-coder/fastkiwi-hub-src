@@ -1,0 +1,33 @@
+{
+  "_comment": "Mirrors what FastKiwi.exe --detect-json found on the dev PC on 2026-11-14 (user name replaced): Remember Me NSIS 1.6.1, InstaFind portable in the old Programs\\Bahth folder, Lemon portable. No Store packages, no winget, no InstaWords.",
+  "env": {
+    "LOCALAPPDATA": "C:\\Users\\T\\AppData\\Local",
+    "APPDATA": "C:\\Users\\T\\AppData\\Roaming",
+    "USERPROFILE": "C:\\Users\\T",
+    "PROGRAMFILES": "C:\\Program Files"
+  },
+  "files": {
+    "C:\\Users\\T\\AppData\\Local\\Programs\\Bahth\\bahth.exe": { "size": 6873600 },
+    "C:\\Users\\T\\AppData\\Local\\Programs\\LocalAiChat\\local-ai-chat.exe": { "size": 9210368, "version": "2.2.0" },
+    "C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\Remember Me.exe": { "size": 249866240, "version": "1.6.1" }
+  },
+  "dirs": {
+    "C:\\Users\\T\\AppData\\Local\\Microsoft\\WinGet\\Packages": ["Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"]
+  },
+  "registry": {
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\a92ab8ea-9a18-5b57-8667-052d208c8425": {
+      "DisplayName": "Remember Me",
+      "DisplayVersion": "1.6.1",
+      "Publisher": "Sarmad",
+      "EstimatedSize": 328105,
+      "UninstallString": "\"C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\Uninstall Remember Me.exe\" /currentuser",
+      "DisplayIcon": "C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me\\uninstallerIcon.ico"
+    },
+    "HKCU\\Software\\a92ab8ea-9a18-5b57-8667-052d208c8425": {
+      "InstallLocation": "C:\\Users\\T\\AppData\\Local\\Programs\\Remember Me"
+    },
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run": {
+      "SomethingElse": "C:\\Other\\other.exe"
+    }
+  }
+}

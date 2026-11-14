@@ -80,8 +80,10 @@ fn read_values(key: &Key) -> BTreeMap<String, RegValue> {
         let bytes = &data[..data_len as usize];
         let value = if ty == REG_SZ.0 || ty == REG_EXPAND_SZ.0 {
             let wide: Vec<u16> = bytes
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
                 .take_while(|&c| c != 0)
                 .collect();
             RegValue::Str(String::from_utf16_lossy(&wide))

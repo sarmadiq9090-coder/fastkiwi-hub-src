@@ -34,10 +34,7 @@ pub fn launch(t: &Target) -> Result<(), String> {
     let (file, dir) = match t {
         Target::Exe(p) => {
             let path = std::path::Path::new(p);
-            if !path.is_absolute()
-                || !p.to_ascii_lowercase().ends_with(".exe")
-                || !path.is_file()
-            {
+            if !path.is_absolute() || !p.to_ascii_lowercase().ends_with(".exe") || !path.is_file() {
                 return Err("not an exe on this PC".into());
             }
             let dir = path.parent().map(|d| d.to_string_lossy().into_owned());
@@ -84,7 +81,17 @@ pub fn capture_client_png(hwnd: isize, out: &std::path::Path) -> Result<(u32, u3
         let mem = CreateCompatibleDC(Some(screen));
         let bmp = CreateCompatibleBitmap(screen, w, h);
         let old = SelectObject(mem, bmp.into());
-        let blt = BitBlt(mem, 0, 0, w, h, Some(screen), origin.x, origin.y, SRCCOPY | CAPTUREBLT);
+        let blt = BitBlt(
+            mem,
+            0,
+            0,
+            w,
+            h,
+            Some(screen),
+            origin.x,
+            origin.y,
+            SRCCOPY | CAPTUREBLT,
+        );
         let mut bi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -115,7 +122,7 @@ pub fn capture_client_png(hwnd: isize, out: &std::path::Path) -> Result<(u32, u3
         if lines != h {
             return Err("GetDIBits failed".into());
         }
-        for p in px.chunks_exact_mut(4) {
+        for p in px.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
             p[3] = 255;
         }

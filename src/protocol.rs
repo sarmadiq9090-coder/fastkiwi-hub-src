@@ -133,7 +133,10 @@ pub enum ProtoError {
     WrongDirection(String),
     BadFields(String),
     BadValue(String),
-    WrongModule { expected: String, got: String },
+    WrongModule {
+        expected: String,
+        got: String,
+    },
 }
 
 impl std::fmt::Display for ProtoError {
@@ -161,7 +164,11 @@ const HUB_TYPES: [&str; 4] = ["theme", "lang", "digits", "update-progress"];
 const MODULE_TYPES: [&str; 2] = ["ready", "open-own-window"];
 
 /// Common envelope checks; returns the object without `proto`.
-fn envelope(text: &str, allowed: &[&str], other: &[&str]) -> Result<Map<String, Value>, ProtoError> {
+fn envelope(
+    text: &str,
+    allowed: &[&str],
+    other: &[&str],
+) -> Result<Map<String, Value>, ProtoError> {
     if text.len() > MAX_MESSAGE_BYTES {
         return Err(ProtoError::TooLarge(text.len()));
     }
@@ -190,7 +197,9 @@ fn envelope(text: &str, allowed: &[&str], other: &[&str]) -> Result<Map<String, 
         .keys()
         .find(|k| k.as_str() != "type" && !fields.contains(&k.as_str()))
     {
-        return Err(ProtoError::BadFields(format!("unknown field {extra:?} in {ty:?}")));
+        return Err(ProtoError::BadFields(format!(
+            "unknown field {extra:?} in {ty:?}"
+        )));
     }
     Ok(obj)
 }
@@ -225,9 +234,8 @@ pub fn is_semver(v: &str) -> bool {
     };
     let ident_ok = |s: &str| {
         !s.is_empty()
-            && s.split('.').all(|p| {
-                !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-            })
+            && s.split('.')
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
     };
     nums.len() == 3
         && nums.iter().all(|n| num_ok(n))

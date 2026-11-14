@@ -88,8 +88,12 @@ mod hub {
             shot: None,
         };
         let mut it = std::env::args().skip(1);
-        let (mut screen, mut theme, mut lang, mut out) =
-            ("home".to_string(), "light".to_string(), "ar".to_string(), None);
+        let (mut screen, mut theme, mut lang, mut out) = (
+            "home".to_string(),
+            "light".to_string(),
+            "ar".to_string(),
+            None,
+        );
         while let Some(x) = it.next() {
             match x.as_str() {
                 "--dev" => a.dev = true,
@@ -170,9 +174,15 @@ mod hub {
         last_launch: HashMap<String, Instant>,
         proxy: EventLoopProxy<Ev>,
         updates: Value,
+        shot_tries: u32,
     }
 
-    fn respond(status: StatusCode, mime: &str, csp: &str, body: Cow<'static, [u8]>) -> Response<Cow<'static, [u8]>> {
+    fn respond(
+        status: StatusCode,
+        mime: &str,
+        csp: &str,
+        body: Cow<'static, [u8]>,
+    ) -> Response<Cow<'static, [u8]>> {
         Response::builder()
             .status(status)
             .header(header::CONTENT_TYPE, mime)
@@ -185,7 +195,12 @@ mod hub {
     }
 
     fn not_found(csp: &str) -> Response<Cow<'static, [u8]>> {
-        respond(StatusCode::NOT_FOUND, "text/plain; charset=utf-8", csp, Cow::Borrowed(b"not found"))
+        respond(
+            StatusCode::NOT_FOUND,
+            "text/plain; charset=utf-8",
+            csp,
+            Cow::Borrowed(b"not found"),
+        )
     }
 
     fn serve_hub(req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
@@ -195,12 +210,21 @@ mod hub {
         match serve::clean_rel_path(req.uri().path(), "index.html")
             .and_then(|rel| serve::ui_file(&rel).map(|b| (rel, b)))
         {
-            Some((rel, bytes)) => respond(StatusCode::OK, serve::mime(&rel), serve::HUB_CSP, Cow::Borrowed(bytes)),
+            Some((rel, bytes)) => respond(
+                StatusCode::OK,
+                serve::mime(&rel),
+                serve::HUB_CSP,
+                Cow::Borrowed(bytes),
+            ),
             None => not_found(serve::HUB_CSP),
         }
     }
 
-    fn serve_module(id: &str, src: &ModuleSource, req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+    fn serve_module(
+        id: &str,
+        src: &ModuleSource,
+        req: Request<Vec<u8>>,
+    ) -> Response<Cow<'static, [u8]>> {
         let csp = serve::MODULE_CSP;
         if req.uri().host() != Some(id) || req.method() != wry::http::Method::GET {
             return not_found(csp);
@@ -293,8 +317,8 @@ mod hub {
         }
         let apps = load_catalog(args);
         let d = detect::detect_all(&detect::windows::WindowsView, &apps);
-        let text = serde_json::to_string_pretty(&json!({ "hub": VERSION, "apps": d }))
-            .unwrap_or_default();
+        let text =
+            serde_json::to_string_pretty(&json!({ "hub": VERSION, "apps": d })).unwrap_or_default();
         let _ = std::fs::write(out, text);
     }
 
@@ -544,7 +568,9 @@ mod hub {
                     self.send_ui(json!({"type": "launched", "app": app, "ok": r.is_ok(), "error": r.err(), "from": "module"}));
                 }
                 Err(e) => {
-                    self.send_ui(json!({"type": "proto-error", "app": app, "error": e.to_string()}));
+                    self.send_ui(
+                        json!({"type": "proto-error", "app": app, "error": e.to_string()}),
+                    );
                 }
             }
         }
@@ -577,7 +603,9 @@ mod hub {
                     let id = s("app");
                     let idx = v.get("install").and_then(Value::as_u64).unwrap_or(0) as usize;
                     let r = self.launch(&id, idx);
-                    self.send_ui(json!({"type": "launched", "app": id, "ok": r.is_ok(), "error": r.err()}));
+                    self.send_ui(
+                        json!({"type": "launched", "app": id, "ok": r.is_ok(), "error": r.err()}),
+                    );
                 }
                 "open-module" => {
                     let id = s("app");
@@ -672,8 +700,21 @@ mod hub {
                 }
                 Ev::ShotNow => {
                     if let Some(s) = &self.args.shot {
+                        // The window must be restored and on top for a screen capture.
+                        self.window.set_minimized(false);
+                        self.window.set_focus();
                         match win::capture_client_png(self.window.hwnd(), &s.out) {
                             Ok((w, h)) => println!("shot {} {w}x{h}", s.out.display()),
+                            Err(e) if self.shot_tries < 3 => {
+                                self.shot_tries += 1;
+                                eprintln!("shot retry: {e}");
+                                let p = self.proxy.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(Duration::from_millis(800));
+                                    let _ = p.send_event(Ev::ShotNow);
+                                });
+                                return;
+                            }
                             Err(e) => eprintln!("shot failed: {e}"),
                         }
                     }
@@ -783,6 +824,7 @@ mod hub {
             last_launch: HashMap::new(),
             proxy,
             updates: serde_json::from_str(catalog::UPDATES_FIXTURE).unwrap_or(Value::Null),
+            shot_tries: 0,
         };
 
         event_loop.run(move |event, _, flow| {

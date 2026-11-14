@@ -1,0 +1,19 @@
+/* Stub module: family tokens from base.css (served from the Hub's tree), nothing else. */
+html, body { background: var(--mica); }
+.mod { max-width: 760px; margin: 0 auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--layer-solid); border: 1px solid var(--stroke); border-radius: 8px; box-shadow: var(--shadow-card); padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+.kicker { margin: 0; font-size: 12px; font-weight: 600; color: var(--accent); }
+h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; }
+h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.card p { margin: 0; line-height: 22px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; max-width: 320px; }
+.field input { height: 40px; font: 500 16px/1 var(--font-num); padding-inline: 12px; }
+.out { font-size: 28px; line-height: 40px; font-weight: 600; color: var(--accent); }
+.acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.got { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.got dt { color: var(--text-2); }
+.got dd { margin: 0; font-weight: 600; }
+.small { font-size: 12.5px; }
+.banner { padding: 10px 14px; border-radius: 8px; background: var(--info-soft); color: var(--info); font-weight: 600; }
+.banner[hidden] { display: none; }
+@media (forced-colors: active) { .card, .banner { border: 1px solid CanvasText; } }

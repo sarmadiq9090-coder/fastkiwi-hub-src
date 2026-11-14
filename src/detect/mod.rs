@@ -221,8 +221,13 @@ fn probe_uninstall(
                 view.reg_values(hive, &format!("Software\\{key}"))
                     .and_then(|v| str_value(&v, "InstallLocation"))
             })
-            .or_else(|| str_value(&vals, "UninstallString").and_then(|c| command_exe(&c).map(|e| parent(&e))))
-            .or_else(|| str_value(&vals, "DisplayIcon").map(|i| parent(i.split(',').next().unwrap_or(""))))
+            .or_else(|| {
+                str_value(&vals, "UninstallString")
+                    .and_then(|c| command_exe(&c).map(|e| parent(&e)))
+            })
+            .or_else(|| {
+                str_value(&vals, "DisplayIcon").map(|i| parent(i.split(',').next().unwrap_or("")))
+            })
             .map(|l| l.trim_end_matches('\\').to_string());
         let Some(location) = location.filter(|l| is_absolute(l)) else {
             continue;
@@ -260,14 +265,26 @@ fn probe_winget(
         let l = join(&join(&root, "Links"), link);
         if view.file(&l).is_some() {
             let target = view.read_link(&l).unwrap_or(l);
-            out.extend(exe_install(view, app, Source::Winget, &target, "winget-link"));
+            out.extend(exe_install(
+                view,
+                app,
+                Source::Winget,
+                &target,
+                "winget-link",
+            ));
         }
         let packages = join(&root, "Packages");
         let prefix = format!("{}_", package_id.to_lowercase());
         for d in view.list_dir(&packages) {
             if d.to_lowercase().starts_with(&prefix) {
                 let exe = join(&join(&packages, &d), exe_name);
-                out.extend(exe_install(view, app, Source::Winget, &exe, "winget-package"));
+                out.extend(exe_install(
+                    view,
+                    app,
+                    Source::Winget,
+                    &exe,
+                    "winget-package",
+                ));
             }
         }
     }

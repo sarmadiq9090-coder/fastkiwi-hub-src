@@ -1,0 +1,15 @@
+{
+  "_comment": "InstaFind was used here (HKCU\\Software\\BahthSari exists) but no copy is left; InstaWords' uninstall record survives in HKLM (32-bit view) while its folder is gone.",
+  "env": {
+    "LOCALAPPDATA": "C:\\Users\\U\\AppData\\Local",
+    "USERPROFILE": "C:\\Users\\U",
+    "PROGRAMFILES": "C:\\Program Files"
+  },
+  "registry": {
+    "HKCU\\Software\\BahthSari": { "Autostart081": 1 },
+    "HKLM32\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1": {
+      "DisplayVersion": "2.2.0",
+      "InstallLocation": "C:\\Program Files (x86)\\InstaWords"
+    }
+  }
+}
