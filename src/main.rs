@@ -271,11 +271,25 @@ mod hub {
         }
     }
 
+    /// Screenshot runs use their own WebView2 profiles (other browser arguments).
+    static SHOT_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
     fn data_dir(sub: &str) -> PathBuf {
+        let shot = SHOT_MODE.load(std::sync::atomic::Ordering::Relaxed);
         settings::hub_dir()
             .unwrap_or_else(std::env::temp_dir)
-            .join("WebView2")
+            .join(if shot { "WebView2-shot" } else { "WebView2" })
             .join(sub)
+    }
+
+    /// wry's default WebView2 arguments, plus (screenshot runs only) keep painting while the
+    /// window is off screen.
+    fn browser_args() -> String {
+        let mut a = String::from("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection");
+        if SHOT_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+            a.push_str(",CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding");
+        }
+        a
     }
 
     fn load_catalog(args: &Args) -> Vec<CatApp> {
@@ -517,6 +531,7 @@ mod hub {
                 .with_hotkeys_zoom(true)
                 .with_https_scheme(true)
                 .with_browser_accelerator_keys(false)
+                .with_additional_browser_args(browser_args())
                 .build_as_child(&self.window);
             match built {
                 Ok(webview) => {
@@ -660,6 +675,17 @@ mod hub {
                         post(&m.webview, &msg);
                     }
                 }
+                // Dev self-test only: press one of the stub module's own test buttons.
+                "dev-click" if self.args.dev && self.args.shot.is_some() => {
+                    let el = s("el");
+                    if ["away", "bad", "own"].contains(&el.as_str())
+                        && let Some(m) = self.modules.get(&s("app"))
+                    {
+                        let _ = m
+                            .webview
+                            .evaluate_script(&format!("document.getElementById('{el}')?.click()"));
+                    }
+                }
                 "shot-ready" if self.args.shot.is_some() => {
                     let p = self.proxy.clone();
                     std::thread::spawn(move || {
@@ -700,9 +726,7 @@ mod hub {
                 }
                 Ev::ShotNow => {
                     if let Some(s) = &self.args.shot {
-                        // The window must be restored and on top for a screen capture.
                         self.window.set_minimized(false);
-                        self.window.set_focus();
                         match win::capture_client_png(self.window.hwnd(), &s.out) {
                             Ok((w, h)) => println!("shot {} {w}x{h}", s.out.display()),
                             Err(e) if self.shot_tries < 3 => {
@@ -730,6 +754,7 @@ mod hub {
 
     pub fn run() {
         let args = parse_args();
+        SHOT_MODE.store(args.shot.is_some(), std::sync::atomic::Ordering::Relaxed);
         if let Some(out) = &args.detect_json {
             write_detect_json(&args, out);
             return;
@@ -744,9 +769,11 @@ mod hub {
             wb = wb.with_window_icon(Some(icon));
         }
         if args.shot.is_some() {
+            // Off screen and never focused: screenshots must not get in the way of whoever is
+            // using the PC. PrintWindow captures it there.
             wb = wb
-                .with_always_on_top(true)
-                .with_position(LogicalPosition::new(24.0, 24.0))
+                .with_position(LogicalPosition::new(-4000.0, 40.0))
+                .with_focused(false)
                 .with_resizable(false);
         }
         let window = match wb.build(&event_loop) {
@@ -756,6 +783,12 @@ mod hub {
                 return;
             }
         };
+        if args.shot.is_some() {
+            window.set_outer_position(LogicalPosition::new(-4000.0, 40.0));
+        }
+        if std::env::var_os("FASTKIWI_TRACE").is_some() {
+            eprintln!("window at {:?}", window.outer_position());
+        }
 
         let mut hub_ctx = WebContext::new(Some(data_dir("hub")));
         let p_ipc = proxy.clone();
@@ -786,6 +819,7 @@ mod hub {
             .with_https_scheme(true)
             .with_browser_accelerator_keys(false)
             .with_default_context_menus(args.dev)
+            .with_additional_browser_args(browser_args())
             .build(&window);
         let hub = match hub {
             Ok(h) => h,
@@ -828,7 +862,12 @@ mod hub {
         };
 
         event_loop.run(move |event, _, flow| {
-            *flow = ControlFlow::Wait;
+            if *flow != ControlFlow::Exit {
+                *flow = ControlFlow::Wait;
+            }
+            if std::env::var_os("FASTKIWI_TRACE").is_some() {
+                eprintln!("event: {event:?}");
+            }
             match event {
                 Event::UserEvent(ev) => state.on_event(ev, flow),
                 Event::WindowEvent {

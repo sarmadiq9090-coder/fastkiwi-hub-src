@@ -14,6 +14,7 @@ const S = {
   scanning: true,
   scannedAt: null,
   demo: null,        // update demo progress 0..1
+  note: null,        // notice shown in the module bar
   shotSent: false,
 };
 
@@ -174,7 +175,7 @@ function appView() {
       <span class="mname"><img src="${iconOf(a)}" alt=""><bdi>${nameOf(a)}</bdi></span>
       ${statusChip}${srcChip}
       <span class="grow"></span>
-      <span class="hosted">${I("lock_closed")} ${t.hosted}</span>
+      ${S.note ? `<span class="chip ${S.note.bad ? "bad" : "ok"}" role="status">${I(S.note.bad ? "warning_f" : "checkmark_circle_f")} ${esc(S.note.msg)}</span>` : `<span class="hosted">${I("lock_closed")} ${t.hosted}</span>`}
       <button class="btn" data-launch="${esc(S.cur)}" data-i="${firstI}" ${launchable ? "" : `disabled title="${esc(t.noCopy)}"`}>${I("desktop")} ${t.openOwnWindow}</button>
     </div>
     <main class="modview modhost" id="modhost" aria-label="${nameOf(a)}"><div class="modwait">${m.status === "unavailable" || m.status === "error" ? (m.status === "error" ? t.modError : t.modUnavailable) : t.modLoading}</div></main>`;
@@ -371,6 +372,15 @@ function closeTab(id) {
 
 let toastT = 0;
 function toast(msg, bad = false) {
+  // On the app page the module's WebView covers the window below the bars, so the notice
+  // goes into the module bar instead.
+  if (S.view === "app") {
+    S.note = { msg, bad };
+    render();
+    clearTimeout(toastT);
+    toastT = setTimeout(() => { S.note = null; if (S.view === "app") render(); }, 4500);
+    return;
+  }
   let el = $("#toast");
   if (!el) { el = document.createElement("div"); el.id = "toast"; el.setAttribute("role", "status"); document.body.append(el); }
   el.className = `toast${bad ? " bad" : ""}`;
@@ -474,9 +484,14 @@ async function startShot(shot) {
   const until = async (f, ms = 8000) => { const t0 = Date.now(); while (!f() && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 100)); };
   await until(() => S.st.detection !== null);
   await document.fonts.ready;
-  if (shot.screen === "app") {
+  if (shot.screen.startsWith("app")) {
     const id = apps().find((a) => canHost(a.id))?.id;
     if (id) { openHosted(id); await until(() => ["ready", "no-proto", "unavailable", "error"].includes(S.mod[id]?.status), 10000); }
+    const test = shot.screen.split("-")[1]; // app-away | app-bad | app-own: dev self-tests
+    if (id && test) { ipc({ cmd: "dev-click", app: id, el: test }); await new Promise((r) => setTimeout(r, 1500)); }
+  } else if (shot.screen === "launch") {
+    const b = document.querySelector("[data-launch]:not([disabled])");
+    if (b) { b.click(); await new Promise((r) => setTimeout(r, 1500)); }
   } else if (shot.screen === "add") {
     const a = apps().find((x) => !isInstalled(x.id) && x.id === "instawords") ?? apps().find((x) => !isInstalled(x.id));
     if (a) { S.dlg = { kind: "add", app: a.id }; render(); }

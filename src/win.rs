@@ -7,6 +7,7 @@ use windows::Win32::Graphics::Gdi::{
     CreateCompatibleBitmap, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC,
     GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
 };
+use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{GetClientRect, SW_SHOWNORMAL};
 use windows::core::{HSTRING, w};
@@ -63,8 +64,9 @@ pub fn launch(t: &Target) -> Result<(), String> {
     }
 }
 
-/// Capture the window's client area from the screen as PNG (dev `--dev-shot` only). The
-/// window must be visible and on top; the caller makes it so.
+/// Capture the window's client area as PNG (dev `--dev-shot` only). Uses PrintWindow with
+/// PW_RENDERFULLCONTENT, so the window does not have to be on top or focused (the person using
+/// the PC is not disturbed); falls back to copying the screen when that gives nothing.
 pub fn capture_client_png(hwnd: isize, out: &std::path::Path) -> Result<(u32, u32), String> {
     let hwnd = HWND(hwnd as *mut core::ffi::c_void);
     // SAFETY: GDI calls on handles created and released here.
@@ -81,17 +83,22 @@ pub fn capture_client_png(hwnd: isize, out: &std::path::Path) -> Result<(u32, u3
         let mem = CreateCompatibleDC(Some(screen));
         let bmp = CreateCompatibleBitmap(screen, w, h);
         let old = SelectObject(mem, bmp.into());
-        let blt = BitBlt(
-            mem,
-            0,
-            0,
-            w,
-            h,
-            Some(screen),
-            origin.x,
-            origin.y,
-            SRCCOPY | CAPTUREBLT,
-        );
+        // PW_CLIENTONLY (1) | PW_RENDERFULLCONTENT (2): includes the WebView2 composition.
+        let blt = if PrintWindow(hwnd, mem, PRINT_WINDOW_FLAGS(3)).as_bool() {
+            Ok(())
+        } else {
+            BitBlt(
+                mem,
+                0,
+                0,
+                w,
+                h,
+                Some(screen),
+                origin.x,
+                origin.y,
+                SRCCOPY | CAPTUREBLT,
+            )
+        };
         let mut bi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
