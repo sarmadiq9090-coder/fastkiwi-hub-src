@@ -92,3 +92,91 @@ The Hub's own settings live in `%LOCALAPPDATA%\FastKiwi\Hub\settings.json`. «ا
 ## D-H14 Name, icon and binary
 
 Window title «FastKiwi», product FastKiwi Hub (verdict 1), icon `brand/icons/fastkiwi/fastkiwi.ico` (brand v2 kiwi tile, copied from the site repo). The release exe is built to `dist\FastKiwi.exe` and is **not** committed (`.gitignore`). Version 0.1.0 (SemVer).
+
+# Phase D (from 2026-11-14)
+
+## D-H15 Start Phase D now; the Hub owns the contract, the apps own their parts
+
+- **Context.** On 2026-11-14 the owner said «ابدأ» for Phase D, through the manager session. This session is the Phase D architect.
+- **Who does what.**
+  - Each app session implements its own part in its own repo.
+  - The Hub repo holds only:
+    - the contract (`docs/HUB-APP-CONTRACT.md`, `fastkiwi-hub-cli@1`);
+    - the shared adapter (`sdk/embed.js`);
+    - the conformance harness;
+    - the Hub's host side.
+- **InstaConvert** stays out of Phase D until trial #3 and the T-gates (HUB-DESIGN §8, D-069, D-073).
+- **Council.** 5 of 5. The realist seat asked that the contract come first and be small enough for four teams to code against at once.
+
+## D-H16 A capability file, not probing
+
+- **Decision.** An app supports hub mode only if `fastkiwi-hub.json`, next to its exe, declares the command.
+- **Reasons.**
+  - An older build does not know `--hub-host`. Most apps then open their normal window, which is exactly what must not happen.
+  - Comparing versions does not work either: detection often has no version. The InstaFind portable copy on this PC has none in its file.
+  - The file is read only, like the rest of detection, and it ships inside the same package, so it cannot drift from the exe.
+- **Council.** 5 of 5. The security seat wanted the file strict: an invalid file, or one naming another app, means no hub mode.
+
+## D-H17 Key once, then a session cookie
+
+- **Decision.**
+  - The handshake key is used once, at `/__fastkiwi/enter?key=…`, which answers 303 with `fkhub=<session>; HttpOnly; SameSite=Strict`.
+  - Every other request needs the cookie.
+  - Host must be `127.0.0.1:<port>`. `localhost:<port>` may also be accepted, because Lemon's existing guard accepts it.
+  - The Origin and Sec-Fetch-Site guards follow Lemon's `server/guard.rs`. A same-site request (another port on 127.0.0.1) is refused.
+- **Reasons.**
+  - This is the pattern InstaFind already uses (a token link that sets a cookie and redirects) and close to InstaConvert's `/?k=` launch key.
+  - A cookie also covers SSE and WebSocket upgrades, where injecting headers from WebView2 does not.
+  - The key appears only once, in that WebView's own profile. The redirect drops it from the address.
+- **Rejected.**
+  - An `Authorization` header injected through WebResourceRequested: it does not reach WebSockets.
+  - The key in every URL: it would leak through history and logs.
+
+## D-H18 How embed.js knows it is in the Hub
+
+- **Problem.** Lemon's and InstaFind's own windows are WebView2 too, so `window.chrome.webview` exists outside the Hub. And `embed.js` must be byte-identical everywhere (pinned by hash), so it cannot be templated.
+- **Decision.** The Hub sets `window.__FASTKIWI_HUB__ = {proto, module}` with an initialization script, only in WebViews it owns. `embed.js` acts only when that marker names the module from the page's own `<meta name="fastkiwi-module">`.
+- **Council.** 5 of 5. The marker is plain data, not a host object.
+
+## D-H19 `--hub-update`: what was added to the manager's sketch
+
+The manager's sketch was `{state: checking|downloading|installing|done|none|error, progress, code?}`. The council added five things:
+- **`--check-only` and a final `available` state with `version`.** The Updates screen needs «تحديث متاح» without downloading, and the harness needs a mode that never installs.
+- **`--hub-owner <hwnd>`, always passed and always accepted.** The Store consent dialog needs an owner window (spike S2).
+- **Cancel through stdin.** Closing stdin before `installing` ends in `error` `cancelled`. After that point, the install finishes or rolls back.
+- **Overall progress, never going back.** The Store maps download to 0–0.8 and install to 0.8–1 (StoreContext docs).
+- **Consent.** The Hub runs it only on a user action, or when the user has turned on the Hub's update check, which is off by default. The app treats that as the consent for that one check.
+
+Other rules:
+- The error codes are a closed set of 12.
+- The fields allowed in each state are fixed, and order rules apply (`crates/hubcli::UpdateRun`).
+- Exit codes: 0 success, 1 error (with a code line), 2 usage.
+
+## D-H20 `--export-data` layout
+
+- **Layout.** `fastkiwi-export.json` (app, version, UTC time, and every file with its size and SHA-256), plus `data\` in the app's own layout.
+- **Safety.** A non-empty folder is refused untouched (`not-empty`). Paths are checked against Windows' rules: no `..`, no streams, no device names, no two paths that differ only by case.
+- **The Hub's role.** It chooses `Documents\FastKiwi\Backups\<app>-<stamp>\` and never deletes anything after a failure.
+- **Council.** 5 of 5. The UX seat noted that verdict 3 («احتفظ ببياناتي») is only honest if the copy can be checked. The SHA-256 list makes it checkable.
+
+## D-H21 Workspace layout, and a Rust harness instead of Node
+
+- **`crates/hubcli`** holds the schema and validators. It does no I/O. The Hub (step 2), the harness and any app's own Rust tests share it.
+- **`tools/conformance`** builds two binaries:
+  - `check-app`, the harness;
+  - `stub-app`, a conforming app that the tests break on purpose, one fault per rule.
+- **Not in `FastKiwi.exe`.** The harness may use sockets and processes. `tests/guards.rs` scans only the Hub's own sources, and `sdk/` is now scanned too.
+- **Why Rust and not `tools/check-app.mjs`.**
+  - One exe, with no npm install.
+  - It runs inside `cargo test`.
+  - It works for C# (InstaWords) and Electron (Remember Me) builds just as well, because it only drives an exe.
+- The root `Cargo.toml` became a workspace. Plain `cargo test` runs all three packages (`default-members`).
+
+## D-H22 embed.js is pinned by hash
+
+- **Decision.**
+  - Apps copy `sdk/embed.js` byte for byte (LF endings) and serve it at `/__fastkiwi/embed.js`.
+  - The SHA-256 is pinned in three places: `hubcli::EMBED_RELEASES`, `sdk/embed.js.sha256` and the contract.
+  - A test fails if the file changes without a new release entry.
+  - The SPDX header is `LicenseRef-Proprietary`, matching `Cargo.toml` (D-051: closed source).
+- **Reason.** One reviewed adapter in all apps, so a fix in one place is a fix everywhere. The harness can prove that an app ships it unchanged.

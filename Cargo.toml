@@ -51,3 +51,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[workspace]
+members = [".", "crates/hubcli", "tools/conformance"]
+default-members = [".", "crates/hubcli", "tools/conformance"]
+resolver = "3"

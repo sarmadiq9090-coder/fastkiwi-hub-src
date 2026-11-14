@@ -11,6 +11,8 @@ fn sources() -> Vec<(String, String)> {
         root.join("src"),
         root.join("ui").join("js"),
         root.join("ui").join("stub-module"),
+        // The embed adapter every app ships: no network, no storage, no host objects.
+        root.join("sdk"),
     ];
     while let Some(d) = stack.pop() {
         for e in std::fs::read_dir(&d).unwrap().flatten() {
