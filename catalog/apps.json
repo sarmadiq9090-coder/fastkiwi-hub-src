@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "serial": 1,
+  "expires": "2027-05-14",
+  "_comment": "FIXTURE catalog for the Phase C prototype. Site apps.json schema 1 plus a draft `hub` block per app. Nothing is fetched; this file is compiled into FastKiwi.exe. Status other than `released` is hidden (D-069) unless the exe runs with --dev.",
+  "apps": [
+    {
+      "id": "instafind",
+      "status": "released",
+      "name": { "ar": "InstaFind", "en": "InstaFind" },
+      "tagline": { "ar": "ابحث عن أي ملف أثناء الكتابة، حتى داخل PDF وWord.", "en": "Find any file as you type, even inside PDF and Word." },
+      "store": { "id": "9MTK4KMFQ657", "live": false },
+      "winget": { "id": "Sarmad.InstaFind", "live": false },
+      "icon": "icons/instafind.svg",
+      "hub": {
+        "kind": "P",
+        "size_mb": 10,
+        "data_dir": "%LOCALAPPDATA%\\BahthSari",
+        "detect": [
+          { "kind": "store", "pfn": "FastKiwi.InstaFind_sm1xjmj6v76yc", "app_id": "InstaFind" },
+          { "kind": "winget", "package_id": "Sarmad.InstaFind", "link": "bahth.exe", "exe": "bahth.exe" },
+          { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\InstaFind\\bahth.exe" },
+          { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\Bahth\\bahth.exe" },
+          { "kind": "path", "path": "%USERPROFILE%\\scoop\\apps\\instafind\\current\\bahth.exe" },
+          { "kind": "run_value", "name": "BahthSari" },
+          { "kind": "reg_hint", "key": "HKCU\\Software\\BahthSari" }
+        ]
+      }
+    },
+    {
+      "id": "instawords",
+      "status": "released",
+      "name": { "ar": "InstaWords", "en": "InstaWords" },
+      "tagline": { "ar": "اكتب أي مبلغ بالحروف للشيكات والفواتير.", "en": "Write any amount in words for cheques and invoices." },
+      "store": { "id": "9P62P4WQSQNK", "live": false },
+      "winget": { "id": "Sarmad.InstaWords", "live": false },
+      "icon": "icons/instawords.svg",
+      "hub": {
+        "kind": "S",
+        "size_mb": 4,
+        "data_dir": "%APPDATA%\\FastKiwi\\InstaWords",
+        "module": { "web_dir": "web", "entry": "index.html" },
+        "detect": [
+          { "kind": "store", "pfn": "FastKiwi.InstaWords_sm1xjmj6v76yc", "app_id": "App" },
+          { "kind": "uninstall", "key": "{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1", "installer": "inno", "exe": "InstaWords.exe" },
+          { "kind": "winget", "package_id": "Sarmad.InstaWords", "link": "InstaWords.exe", "exe": "InstaWords.exe" },
+          { "kind": "path", "path": "%USERPROFILE%\\scoop\\apps\\instawords\\current\\InstaWords.exe" }
+        ]
+      }
+    },
+    {
+      "id": "remember-me",
+      "status": "released",
+      "name": { "ar": "ذكرني", "en": "Remember Me" },
+      "tagline": { "ar": "تذكيرات تبقى على الشاشة حتى تتعامل معها.", "en": "Reminders that stay on screen until you deal with them." },
+      "store": { "id": "9NGB1F7T7JGN", "live": true },
+      "winget": { "id": "Sarmad.RememberMe", "live": false },
+      "icon": "icons/remember-me.png",
+      "hub": {
+        "kind": "L",
+        "size_mb": 90,
+        "data_dir": "%APPDATA%\\Remember Me",
+        "detect": [
+          { "kind": "store", "pfn": "FastKiwi.RememberMeReminders_sm1xjmj6v76yc", "app_id": "RememberMe" },
+          { "kind": "uninstall", "key": "a92ab8ea-9a18-5b57-8667-052d208c8425", "installer": "nsis", "exe": "Remember Me.exe" }
+        ]
+      }
+    },
+    {
+      "id": "lemon",
+      "status": "released",
+      "name": { "ar": "Lemon", "en": "Lemon" },
+      "tagline": { "ar": "محادثة مع الذكاء الاصطناعي على جهازك، بلا إنترنت.", "en": "Chat with AI on your own PC, offline." },
+      "store": null,
+      "winget": { "id": "Sarmad.Lemon", "live": false },
+      "icon": "icons/lemon.png",
+      "hub": {
+        "kind": "P",
+        "size_mb": 10,
+        "needs": { "ar": "يحتاج Ollama", "en": "Needs Ollama" },
+        "data_dir": "%APPDATA%\\LocalAiChat",
+        "detect": [
+          { "kind": "winget", "package_id": "Sarmad.Lemon", "link": "local-ai-chat.exe", "exe": "local-ai-chat.exe" },
+          { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\LocalAiChat\\local-ai-chat.exe" },
+          { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\Lemon\\local-ai-chat.exe" }
+        ]
+      }
+    },
+    {
+      "id": "instaconvert",
+      "status": "coming-soon",
+      "name": { "ar": "InstaConvert", "en": "InstaConvert" },
+      "tagline": { "ar": "من PDF والصور إلى Excel، ويعلّم كل رقم يشكّ فيه.", "en": "PDFs and images to Excel; flags every doubtful number." },
+      "store": null,
+      "winget": null,
+      "icon": "icons/instaconvert.png",
+      "hub": {
+        "kind": "P",
+        "size_mb": 25,
+        "on_demand": [ { "what": { "ar": "نماذج قراءة الصفحات الممسوحة", "en": "Models for scanned pages" }, "size_mb": 28 } ],
+        "data_dir": "%LOCALAPPDATA%\\InstaConvert",
+        "detect": [
+          { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\InstaConvert\\instaconvert.exe" }
+        ]
+      }
+    }
+  ]
+}

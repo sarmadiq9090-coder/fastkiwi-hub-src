@@ -1,0 +1,52 @@
+[package]
+name = "fastkiwi-hub"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "FastKiwi Hub (Phase C prototype shell): one window for the FastKiwi apps, read-only detection, launch only."
+license = "LicenseRef-Proprietary"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "kiwi_hub"
+path = "src/lib.rs"
+
+[[bin]]
+name = "FastKiwi"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+url = "2.5.8"
+
+[target."cfg(windows)".dependencies]
+tao = "0.37.2"
+wry = "0.57.1"
+webview2-com = "0.39.1"
+png = "0.18.1"
+windows = { version = "0.62.2", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "ApplicationModel",
+    "Management_Deployment",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_System_WinRT",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+winresource = "0.1.34"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,424 @@
+/* InstaConvert — base styles from the approved final design (base: concept A "Calm precision"; features from B).
+   Fonts: IBM Plex Sans Arabic / IBM Plex Sans / IBM Plex Mono / Noto Naskh Arabic (OFL, owner-approved), local in fonts/.
+   Colour has jobs: accent = the app's actions · green = consistent/accepted only · amber = needs review only ·
+   red = non-zero difference only. Every state also carries an icon or words, never colour alone.
+
+   Themes (Settings ▸ Theme; main.js applyTheme): the FastKiwi family's five, same names and base
+   colours as InstaFind 1.1 (src/webui/assets/app.css): auto (follows Windows' light or dark mode),
+   light and dark (Windows 11's), midnight (deep teal, lime actions) and kiwi (fastkiwi.app's greens).
+   <html data-theme> holds the theme in use (auto is resolved to light or dark) and data-tone its
+   light or dark family. A [data-swatch] element (the theme picker) wears a theme's colours too.
+   Contrast (computed by checks/contrast in the PR, WCAG 2.1): text tokens ≥ 4.5:1 on every surface
+   they sit on; button borders, the focus ring and state graphics ≥ 3:1. Windows high contrast
+   (forced colours) replaces them all; see the end of this file. */
+
+:root {
+  --r-sm: 4px; --r: 8px; --r-lg: 12px; --r-btn: 6px;
+  --font: "IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-en: "IBM Plex Sans", "IBM Plex Sans Arabic", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Sans", "Segoe UI Variable", sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, monospace;   /* glyph-distinct: 1 l I 0 O */
+  --font-print: "Noto Naskh Arabic", serif;
+
+  /* The same in every theme: the printed page stays paper, the beam stays lime. */
+  --lime: #c6f432;            /* decorative fill only (beam, live row); text on it = --on-lime */
+  --on-lime: #1f3a00;         /* 9.9:1 on lime */
+  --beam: linear-gradient(90deg, transparent, rgb(198 244 50 / .85) 12%, rgb(198 244 50 / .95) 50%, rgb(198 244 50 / .85) 88%, transparent);
+  --paper: #fbf9f2;
+  --paper-ink: #262421;
+}
+
+/* LIGHT — Windows 11 light (InstaFind "light"); also the colours before a theme is applied. */
+:root, [data-swatch="light"], [data-swatch="auto"] > i:first-child {
+  color-scheme: light;
+  --mica: #f5f6f8;
+  --main-bg: rgb(255 255 255 / .5);
+  --layer: rgb(255 255 255 / .8);
+  --layer-solid: #ffffff;
+  --layer-alt: #f0f2f5;
+  --canvas: #e6e9ee;
+  --subtle: rgb(0 0 0 / .035);
+  --subtle-2: rgb(0 0 0 / .06);
+  --stroke: rgb(0 0 0 / .09);
+  --stroke-2: rgb(0 0 0 / .16);
+  --btn-line: #7b828c;        /* secondary button border: ≥ 3:1 on every surface */
+  --focus: #1a1c1f;
+  --text: #1a1c1f;
+  --text-2: #555b64;
+  --text-3: #60676f;
+  --accent: #005fb8;
+  --accent-hover: #004c93;
+  --accent-soft: #e1ecf8;
+  --accent-line: rgb(0 95 184 / .45);
+  --on-accent: #ffffff;
+  --ok: #1e7b34;
+  --ok-soft: #e5f3e8;
+  --ok-line: #9fd3ab;
+  --on-ok: #ffffff;
+  --warn: #8f5500;            /* amber TEXT */
+  --warn-icon: #a86400;       /* amber GRAPHIC */
+  --warn-soft: #fff3d4;
+  --warn-line: #e3a53a;
+  --on-warn: #ffffff;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+  --bad-line: rgb(180 35 24 / .3);
+  --info: #3d4fb0;
+  --info-soft: #eef0fb;
+  --lime-text: #4c6b00;
+  --live-row: rgb(198 244 50 / .22);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / .05);
+  --shadow-flyout: 0 8px 16px rgb(0 0 0 / .12), 0 0 2px rgb(0 0 0 / .1);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / .22), 0 2px 21px rgb(0 0 0 / .14);
+  --smoke: rgb(20 22 26 / .38);
+}
+
+/* DARK — Windows 11 dark (InstaFind "dark"). */
+:root[data-theme="dark"], [data-swatch="dark"], [data-swatch="auto"] > i:last-child {
+  color-scheme: dark;
+  --mica: #1c1f24;
+  --main-bg: rgb(255 255 255 / .02);
+  --layer: rgb(36 40 46 / .9);
+  --layer-solid: #24282e;
+  --layer-alt: #2d3239;
+  --canvas: #16191d;
+  --subtle: rgb(255 255 255 / .04);
+  --subtle-2: rgb(255 255 255 / .08);
+  --stroke: rgb(255 255 255 / .09);
+  --stroke-2: rgb(255 255 255 / .16);
+  --btn-line: #7f8792;
+  --focus: #ffffff;
+  --text: #e9ebee;
+  --text-2: #b3bac2;
+  --text-3: #a3abb4;
+  --accent: #60cdff;
+  --accent-hover: #8ad9ff;
+  --accent-soft: rgb(96 205 255 / .14);
+  --accent-line: rgb(96 205 255 / .45);
+  --on-accent: #0a1b26;
+  --ok: #5fd07a;
+  --ok-soft: rgb(95 208 122 / .13);
+  --ok-line: rgb(95 208 122 / .45);
+  --on-ok: #072a10;
+  --warn: #f0b549;
+  --warn-icon: #f0b549;
+  --warn-soft: rgb(240 181 73 / .13);
+  --warn-line: rgb(240 181 73 / .6);
+  --on-warn: #2a1a00;
+  --bad: #ff8a7a;
+  --bad-soft: rgb(255 138 122 / .12);
+  --bad-line: rgb(255 138 122 / .4);
+  --info: #a3b0ff;
+  --info-soft: rgb(154 168 255 / .12);
+  --lime-text: #c6f432;
+  --live-row: rgb(198 244 50 / .10);
+  --paper: #f3f0e6;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / .3);
+  --shadow-flyout: 0 10px 24px rgb(0 0 0 / .45), 0 0 0 1px rgb(255 255 255 / .06);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / .55);
+  --smoke: rgb(0 0 0 / .5);
+}
+
+/* MIDNIGHT — deep teal with lime actions (InstaFind "midnight", the teal of 1.0). */
+:root[data-theme="midnight"], [data-swatch="midnight"] {
+  color-scheme: dark;
+  --mica: #0f1a1f;
+  --main-bg: rgb(255 255 255 / .02);
+  --layer: rgb(19 35 42 / .9);
+  --layer-solid: #13232a;
+  --layer-alt: #172a32;
+  --canvas: #0b1418;
+  --subtle: rgb(255 255 255 / .04);
+  --subtle-2: rgb(255 255 255 / .08);
+  --stroke: rgb(255 255 255 / .09);
+  --stroke-2: rgb(255 255 255 / .16);
+  --btn-line: #6a8791;
+  --focus: #ffffff;
+  --text: #e8f0e6;
+  --text-2: #a6b9b0;
+  --text-3: #98ada3;
+  --accent: #b9f34a;
+  --accent-hover: #ccf77a;
+  --accent-soft: rgb(185 243 74 / .14);
+  --accent-line: rgb(185 243 74 / .45);
+  --on-accent: #123b2a;
+  --ok: #5fd07a;
+  --ok-soft: rgb(95 208 122 / .13);
+  --ok-line: rgb(95 208 122 / .45);
+  --on-ok: #072a10;
+  --warn: #f0b549;
+  --warn-icon: #f0b549;
+  --warn-soft: rgb(240 181 73 / .13);
+  --warn-line: rgb(240 181 73 / .6);
+  --on-warn: #2a1a00;
+  --bad: #ff8a7a;
+  --bad-soft: rgb(255 138 122 / .12);
+  --bad-line: rgb(255 138 122 / .4);
+  --info: #78cfff;
+  --info-soft: rgb(120 207 255 / .12);
+  --lime-text: #c6f432;
+  --live-row: rgb(198 244 50 / .10);
+  --paper: #f3f0e6;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / .3);
+  --shadow-flyout: 0 10px 24px rgb(0 0 0 / .45), 0 0 0 1px rgb(255 255 255 / .06);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / .55);
+  --smoke: rgb(0 0 0 / .5);
+}
+
+/* KIWI — fastkiwi.app's greens on light (InstaFind "kiwi"). */
+:root[data-theme="kiwi"], [data-swatch="kiwi"] {
+  color-scheme: light;
+  --mica: #f6f7f1;
+  --main-bg: rgb(255 255 255 / .5);
+  --layer: rgb(255 255 255 / .8);
+  --layer-solid: #ffffff;
+  --layer-alt: #eef0e4;
+  --canvas: #e3e7d5;
+  --subtle: rgb(20 22 13 / .04);
+  --subtle-2: rgb(20 22 13 / .07);
+  --stroke: rgb(20 22 13 / .1);
+  --stroke-2: rgb(20 22 13 / .17);
+  --btn-line: #848b74;
+  --focus: #14160d;
+  --text: #14160d;
+  --text-2: #4f5545;
+  --text-3: #5c6252;
+  --accent: #3f7a08;
+  --accent-hover: #33650a;
+  --accent-soft: #e9f5d8;
+  --accent-line: rgb(63 122 8 / .45);
+  --on-accent: #ffffff;
+  --ok: #1e7b34;
+  --ok-soft: #e5f3e8;
+  --ok-line: #9fd3ab;
+  --on-ok: #ffffff;
+  --warn: #8f5500;
+  --warn-icon: #a86400;
+  --warn-soft: #fff3d4;
+  --warn-line: #e3a53a;
+  --on-warn: #ffffff;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+  --bad-line: rgb(180 35 24 / .3);
+  --info: #3d4fb0;
+  --info-soft: #eef0fb;
+  --lime-text: #4c6b00;
+  --live-row: rgb(198 244 50 / .22);
+  --shadow-card: 0 1px 2px rgb(20 22 13 / .06);
+  --shadow-flyout: 0 8px 16px rgb(20 22 13 / .12), 0 0 2px rgb(20 22 13 / .1);
+  --shadow-dialog: 0 32px 64px rgb(20 22 13 / .22), 0 2px 21px rgb(20 22 13 / .14);
+  --smoke: rgb(20 22 13 / .38);
+}
+
+
+* { box-sizing: border-box; }
+/* The shell fills the window, whatever its size (the 1440x900 design reference down to about
+   1024x600: a 1366x768 laptop at 125% scaling is ~1093x614 CSS px). The page itself never scrolls:
+   each view scrolls inside its own area, and the side nav always stays in view. */
+html, body { margin: 0; width: 100%; height: 100%; }
+body {
+  overflow: hidden;
+  font: 400 14px/1.5 var(--font); color: var(--text);
+  background: var(--mica);
+  -webkit-font-smoothing: antialiased;
+}
+html[lang="en"] body { font-family: var(--font-en); }
+svg.i { width: 16px; height: 16px; fill: currentColor; flex: none; display: inline-block; vertical-align: -3px; }
+svg.i.s20 { width: 20px; height: 20px; vertical-align: -5px; }
+svg.i.s24 { width: 24px; height: 24px; }
+svg.i.s12 { width: 12px; height: 12px; vertical-align: -1px; }
+.num { font-family: var(--font-num); font-feature-settings: "tnum" 1, "lnum" 1; direction: ltr; unicode-bidi: isolate; }
+.mono { font-family: var(--font-mono); direction: ltr; unicode-bidi: isolate; }
+.ar-num { font-family: var(--font); }
+.muted { color: var(--text-2); }
+.faint { color: var(--text-3); }
+kbd { font: 500 11px/1 var(--font-en); padding: 3px 5px; border-radius: 4px; border: 1px solid var(--stroke-2); border-bottom-width: 2px; background: var(--layer-solid); color: var(--text-2); direction: ltr; display: inline-block; white-space: nowrap; }
+
+/* ---------- window chrome ---------- */
+.win { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.titlebar { height: 40px; display: flex; align-items: center; gap: 10px; padding-inline-start: 14px; flex: none; }
+.titlebar .appicon { width: 18px; height: 18px; }
+.titlebar .appname { font-size: 12.5px; font-weight: 500; }
+.titlebar .crumb { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.titlebar .grow { flex: 1; }
+.caption { display: flex; height: 40px; }
+.caption span { width: 46px; display: grid; place-items: center; color: var(--text); }
+.caption svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 1; }
+
+/* ---------- buttons & controls ----------
+   Fluent / Windows 11 hierarchy, one look in every theme:
+   .primary   the screen's one main action: accent fill (one per screen or dialog)
+   .ok        Accept in a flag card: the same weight as primary, in the "accepted" green
+   (plain)    secondary: surface fill with a visible border (≥ 3:1)
+   .subtle    tertiary: no border until hovered (toolbars, inline links)
+   .danger    deletes or forgets something: red label and border
+   Every button is at least 40 px tall (.sm 32 px for inline row actions; WCAG 2.5.8 asks 24),
+   carries words (icon-only only for page/zoom tools, which have an aria-label), and shows a
+   2 px focus ring. Keyboard shortcuts are listed in F1 and in Review's legend, not on buttons. */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 40px; padding: 0 16px; border-radius: var(--r-btn);
+  border: 1px solid var(--btn-line); background: var(--layer-solid);
+  font: 500 14px/1.2 inherit; font-family: inherit; color: var(--text); white-space: nowrap; }
+.btn:hover { background: var(--layer-alt); }
+.btn:active { background: var(--subtle-2); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ok { background: var(--ok); color: var(--on-ok); border-color: var(--ok); font-weight: 600; }
+.btn.ok:hover { filter: brightness(1.08); }
+.btn.subtle { background: transparent; border-color: transparent; }
+.btn.subtle:hover { background: var(--subtle-2); }
+.btn.danger { color: var(--bad); border-color: var(--bad); background: var(--layer-solid); }
+.btn.danger:hover { background: var(--bad-soft); }
+.btn.danger.sm { color: var(--bad); }
+.btn.lg { min-height: 44px; padding: 0 20px; font-size: 15px; }
+.btn.icon { width: 40px; padding: 0; }
+.btn kbd { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  background: var(--subtle); color: var(--text-2); border: 1px solid var(--stroke); white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.chip.warn svg { color: var(--warn-icon); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.chip.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--subtle-2); gap: 2px; }
+.seg span { height: 28px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 13px; color: var(--text-2); }
+.seg span.on { background: var(--layer-solid); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card), 0 0 0 1px var(--stroke); }
+.seg b { font-weight: 500; font-size: 11.5px; padding: 0 6px; border-radius: 999px; background: var(--subtle-2); }
+.seg b.warn { background: var(--warn-soft); color: var(--warn); }
+.seg b.ok { background: var(--ok-soft); color: var(--ok); }
+.toggle { width: 40px; height: 20px; border-radius: 10px; background: var(--accent); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 4px; inset-inline-end: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--layer-solid); }
+.toggle.off { background: transparent; border: 1px solid var(--text-2); }
+.toggle.off::after { inset-inline-end: auto; inset-inline-start: 3px; top: 3px; background: var(--text-2); }
+.check { width: 18px; height: 18px; border-radius: 4px; background: var(--accent); display: grid; place-items: center; color: var(--on-accent); flex: none; }
+.check.off { background: transparent; border: 1px solid var(--text-2); }
+.check svg { width: 12px; height: 12px; }
+.radio { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--text-2); flex: none; background: var(--layer-solid); }
+.radio.on { border: 6px solid var(--accent); }
+.card { background: var(--layer); border: 1px solid var(--stroke); border-radius: var(--r); box-shadow: var(--shadow-card); }
+.divider-v { width: 1px; align-self: stretch; background: var(--stroke); }
+
+/* ---------- status pill (from B): follows the ACTIVE mode, never a static claim ---------- */
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
+.pill.local { background: var(--ok-soft); color: var(--ok); }
+.pill.online-private { background: var(--info-soft); color: var(--info); }
+.pill.online-public { background: var(--bad-soft); color: var(--bad); }
+.pill small { font-weight: 500; opacity: .9; }
+
+/* privacy badges (mode picker / consent) */
+.pb { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.pb.local { background: var(--ok-soft); color: var(--ok); }
+.pb.private { background: var(--info-soft); color: var(--info); }
+.pb.public { background: var(--bad-soft); color: var(--bad); }
+.pb.depends { background: var(--subtle-2); color: var(--text-2); }
+
+/* numbered pins (from B): the same number on the scan and in the table */
+.pin { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; font: 700 11px/1 var(--font-num);
+  background: var(--warn-icon); color: var(--on-warn); box-shadow: 0 0 0 2px var(--layer-solid); }
+.pin.ok { background: var(--ok); color: var(--on-ok); }
+.pin.sel { box-shadow: 0 0 0 2px var(--layer-solid), 0 0 0 4px var(--text); }
+
+/* ---------- navigation view ---------- */
+.nav { width: 236px; flex: none; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav a { height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; position: relative; }
+.nav a.on { background: var(--subtle-2); font-weight: 600; }
+.nav a.on::before { content: ""; position: absolute; inset-inline-start: 0; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--accent); }
+.nav .sep { height: 1px; background: var(--stroke); margin: 8px 4px; }
+.nav .grow { flex: 1; }
+.nav > :not(.grow) { flex-shrink: 0; }   /* a short window scrolls the nav instead of squashing its links */
+.nav .badge { margin-inline-start: auto; font-size: 11px; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 7px; line-height: 18px; }
+
+/* ---------- InfoBar ---------- */
+.infobar { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); border: 1px solid var(--warn-line); }
+.infobar > svg { color: var(--warn-icon); margin-top: 2px; }
+.infobar.ok { background: var(--ok-soft); border-color: var(--ok-line); }
+.infobar.ok > svg { color: var(--ok); }
+.infobar.bad { background: var(--bad-soft); border-color: var(--bad-line); }
+.infobar.bad > svg { color: var(--bad); }
+
+/* ---------- printed-page simulation (the "scan") ---------- */
+.paper { background: var(--paper); color: var(--paper-ink); font-family: var(--font-print); position: relative;
+  box-shadow: 0 1px 3px rgb(0 0 0 / .18), 0 12px 30px -12px rgb(0 0 0 / .3); }
+.paper .ink { filter: url(#ink); }
+[hidden] { display: none !important; }
+
+/* ---- app additions (not in the static mock) ---- */
+button.btn, a.btn { font: inherit; cursor: pointer; text-decoration: none; }
+/* Disabled: no fill, dashed border, grey label: clearly "not now", in any theme. */
+.btn:disabled, .btn[aria-disabled="true"], .btn.primary:disabled, .btn.ok:disabled, .btn.danger:disabled {
+  background: transparent; color: var(--text-3); border: 1px dashed var(--btn-line); filter: none; cursor: not-allowed; opacity: 1; }
+/* One focus ring for everything focusable (WCAG 2.4.7, ≥ 3:1 in every theme). */
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn:focus-visible, .nav a:focus-visible, [tabindex]:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.nav a { cursor: pointer; }
+.view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.view[hidden] { display: none; }
+.toast { position: fixed; bottom: 18px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--layer-solid); color: var(--text); border: 1px solid var(--stroke-2);
+  box-shadow: var(--shadow-flyout); border-radius: var(--r); padding: 10px 16px; font-size: 13.5px; z-index: 50; max-width: 70vw; }
+html[dir="rtl"] .toast { transform: translateX(50%); }
+.toast.bad { border-color: var(--bad); color: var(--bad); }
+.modal-back { position: fixed; inset: 0; background: var(--smoke); display: grid; place-items: center; z-index: 40; }
+.modal { background: var(--layer-solid); border-radius: var(--r-lg); box-shadow: var(--shadow-dialog); padding: 22px 24px; min-width: min(420px, calc(100vw - 32px)); max-width: min(760px, calc(100vw - 32px)); max-height: min(86vh, calc(100vh - 32px)); overflow: auto; overscroll-behavior: contain; }
+.modal h2 { margin: 0 0 10px; font-size: 19px; }
+.modal .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+/* A dialog taller than a small window scrolls inside; its buttons stay pinned at the bottom.
+   The ::after covers the dialog's bottom padding so scrolled content does not peek below them. */
+.modal .acts { position: sticky; bottom: 0; z-index: 1; background: inherit; }
+.modal .acts::after { content: ""; position: absolute; inset-inline: 0; top: 100%; height: 16px; background: inherit; pointer-events: none; }
+input.text, select.text { height: 32px; border-radius: var(--r-sm); border: 1px solid var(--stroke-2); background: var(--layer-solid); color: var(--text); padding: 0 10px; font: inherit; }
+[dir="auto"], .bidi { unicode-bidi: plaintext; text-align: start; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.body { flex: 1; display: flex; min-width: 0; min-height: 0; }
+.view-host { flex: 1; min-width: 0; min-height: 0; display: flex; }
+.privacy { display: flex; gap: 9px; align-items: flex-start; font-size: 12px; color: var(--text-2); padding: 10px 12px; border-radius: 6px; background: var(--ok-soft); line-height: 1.55; }
+.privacy svg { color: var(--ok); margin-top: 1px; }
+.privacy b { color: var(--ok); font-weight: 600; display: block; }
+.privacy.public { background: var(--bad-soft); }
+.privacy.public svg, .privacy.public b { color: var(--bad); }
+.privacy.remote { background: var(--info-soft); }
+.privacy.remote svg, .privacy.remote b { color: var(--info); }
+body.nav-hidden .nav { display: none; }
+
+/* ---------- shared additions: sizes, disclosure, theme picker, review emphasis ---------- */
+.btn.sm { min-height: 32px; min-width: 32px; padding: 0 12px; font-size: 13px; }
+.zoom .btn { min-height: 32px; min-width: 32px; }
+.fly h4 .btn.x { min-height: 32px; min-width: 32px; }
+
+/* «خيارات أكثر»: secondary options stay one click away, closed by default. */
+details.more { border: 1px solid var(--stroke); border-radius: var(--r); background: var(--layer-solid); }
+details.more > summary { list-style: none; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px; cursor: pointer; font-weight: 600; border-radius: var(--r); }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary:hover { background: var(--subtle); }
+details.more > summary .now { font-weight: 400; color: var(--text-2); font-size: 13px; }
+details.more > summary .chev { margin-inline-start: auto; color: var(--text-2); transition: transform .15s; }
+details.more[open] > summary .chev { transform: rotate(180deg); }
+details.more > .more-body { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Theme picker (Settings): each choice wears its theme's own colours (InstaFind's swatch). */
+.themes { display: flex; flex-wrap: wrap; gap: 8px; }
+.thm { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding-inline: 8px 14px; border-radius: var(--r); border: 1px solid var(--btn-line);
+  background: var(--layer-solid); color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer; }
+.thm:hover { background: var(--layer-alt); }
+.thm[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+.thm .tick { display: none; color: var(--accent); }
+.thm[aria-checked="true"] .tick { display: inline-flex; }
+.swatch { display: inline-flex; width: 40px; height: 28px; flex: none; border-radius: 6px; overflow: hidden; border: 1px solid var(--btn-line); background: var(--mica); }
+.swatch > i { flex: 1; position: relative; background: var(--mica); }
+.swatch > i::after { content: ""; position: absolute; top: calc(50% - 5px); inset-inline-start: calc(50% - 5px); width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.swatch:not([data-swatch="auto"]) > i:last-child { background: var(--layer-solid); }
+.swatch:not([data-swatch="auto"]) > i:last-child::after { width: 12px; height: 3px; top: calc(50% - 1.5px); inset-inline-start: calc(50% - 6px); border-radius: 2px; background: var(--text); }
+
+/* ---------- reduced motion and Windows high contrast ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; animation-iteration-count: 1 !important; }
+}
+@media (forced-colors: active) {
+  .btn, .thm, details.more, .se-seg, .seg { border: 1px solid ButtonText; }
+  .btn.primary, .btn.ok { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
+  .btn:disabled { color: GrayText; border-color: GrayText; }
+  :focus-visible { outline: 2px solid Highlight; }
+  .thm[aria-checked="true"], .nav a.on, [aria-checked="true"].on { outline: 2px solid Highlight; }
+  .swatch { forced-color-adjust: none; }
+  .pin, .chip { border: 1px solid CanvasText; }
+}
