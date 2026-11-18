@@ -163,6 +163,25 @@ pub fn command_exe(cmd: &str) -> Option<String> {
     (is_absolute(&exe) && exe.to_ascii_lowercase().ends_with(".exe")).then_some(exe)
 }
 
+/// The places a desktop copy may be launched from.
+pub const LAUNCH_ROOTS: [&str; 3] = [
+    "%PROGRAMFILES%",
+    "%PROGRAMFILES(X86)%",
+    "%LOCALAPPDATA%\\Programs",
+];
+
+/// Is `exe` an absolute path inside one of [`LAUNCH_ROOTS`], with no `.` or `..` segment?
+pub fn allowed_exe(view: &dyn SystemView, exe: &str) -> bool {
+    if !is_absolute(exe) || exe.split('\\').any(|s| s == ".." || s == ".") || exe.contains('/') {
+        return false;
+    }
+    let e = norm(exe);
+    LAUNCH_ROOTS.iter().filter_map(|r| expand(view, r)).any(|root| {
+        let r = norm(&root);
+        !r.is_empty() && e.starts_with(&format!("{r}\\"))
+    })
+}
+
 fn str_value(vals: &BTreeMap<String, RegValue>, name: &str) -> Option<String> {
     vals.iter()
         .find(|(k, _)| k.eq_ignore_ascii_case(name))
@@ -355,6 +374,7 @@ pub fn detect_app(view: &dyn SystemView, app: &App) -> AppDetection {
                 .and_then(|exe| exe_install(view, app, Source::Portable, &exe, "run-value"))
                 .into_iter()
                 .collect(),
+            Probe::Unknown => Vec::new(),
             Probe::RegHint { key } => {
                 if let Some((hive, sub)) = key.split_once('\\')
                     && let Some(h) = Hive::parse(hive)
@@ -379,6 +399,10 @@ pub fn detect_app(view: &dyn SystemView, app: &App) -> AppDetection {
             }
         }
     }
+    // Only copies in fixed install places count (council 2026-11-18, C2): Program Files and
+    // %LOCALAPPDATA%\Programs for desktop copies, the package family for Store copies. A copy
+    // found through a registry value or a link that points elsewhere is not listed.
+    installs.retain(|i| i.source == Source::Store || i.exe.as_deref().is_none_or(|e| allowed_exe(view, e)));
     if !installs.is_empty() {
         used_before = false;
     }
@@ -406,7 +430,10 @@ fn hub_caps(view: &dyn SystemView, app: &App, i: &Install) -> Option<Vec<hubcli:
         .map(|m| m.commands)
 }
 
-/// Detect every app in `apps`.
+/// Detect every Windows app in `apps` (phone apps are never looked for on the PC).
 pub fn detect_all(view: &dyn SystemView, apps: &[App]) -> Vec<AppDetection> {
-    apps.iter().map(|a| detect_app(view, a)).collect()
+    apps.iter()
+        .filter(|a| a.platform == crate::catalog::Platform::Windows)
+        .map(|a| detect_app(view, a))
+        .collect()
 }

@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.90"
 description = "fastkiwi-hub-cli@1: the command-line contract between FastKiwi Hub and each app (docs/HUB-APP-CONTRACT.md). Parsing and validation only: no I/O."
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
 publish = false
 
 [lib]

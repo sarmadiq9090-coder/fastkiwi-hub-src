@@ -1,0 +1,15 @@
+[package]
+name = "fastkiwi-catalog-sign"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Signs the Hub catalog (apps.json) with minisign, and makes the key pair. Maintainer tool; never shipped."
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "catalog-sign"
+path = "src/main.rs"
+
+[dependencies]
+minisign = "0.7"

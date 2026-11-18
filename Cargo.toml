@@ -1,10 +1,11 @@
 [package]
 name = "fastkiwi-hub"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.90"
-description = "FastKiwi Hub (Phase D prototype): one window for the FastKiwi apps. Read-only detection, hosting through each app's --hub-host, updates through its --hub-update."
-license = "LicenseRef-Proprietary"
+description = "FastKiwi Hub: one window for your programs. A catalog of FastKiwi apps (and others), read-only detection, launch, and update checks that open the installer link in your browser."
+license = "Apache-2.0"
+repository = "https://github.com/sarmadiq9090-coder/fastkiwi-hub"
 publish = false
 build = "build.rs"
 
@@ -13,7 +14,7 @@ name = "kiwi_hub"
 path = "src/lib.rs"
 
 [[bin]]
-name = "FastKiwi"
+name = "FastKiwi-Hub"
 path = "src/main.rs"
 
 [dependencies]
@@ -21,6 +22,7 @@ hubcli = { package = "fastkiwi-hubcli", path = "crates/hubcli" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 url = "2.5.8"
+minisign-verify = "0.2"
 
 [target."cfg(windows)".dependencies]
 tao = "0.37.2"
@@ -34,12 +36,17 @@ windows = { version = "0.62.2", features = [
     "Management_Deployment",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Networking_WinHttp",
     "Win32_Storage_FileSystem",
     "Win32_Storage_Xps",
     "Win32_System_Com",
     "Win32_System_Registry",
+    "Win32_System_Threading",
     "Win32_System_WinRT",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
@@ -54,6 +61,6 @@ panic = "abort"
 strip = true
 
 [workspace]
-members = [".", "crates/hubcli", "tools/conformance"]
-default-members = [".", "crates/hubcli", "tools/conformance"]
+members = [".", "crates/hubcli", "tools/conformance", "tools/catalog-sign"]
+default-members = [".", "crates/hubcli", "tools/conformance", "tools/catalog-sign"]
 resolver = "3"

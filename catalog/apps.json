@@ -1,50 +1,32 @@
 {
   "schema": 1,
-  "serial": 1,
-  "expires": "2027-05-14",
-  "_comment": "FIXTURE catalog for the Phase C prototype. Site apps.json schema 1 plus a draft `hub` block per app. Nothing is fetched; this file is compiled into FastKiwi.exe. Status other than `released` is hidden (D-069) unless the exe runs with --dev.",
+  "serial": 2026111801,
+  "expires": "2027-11-18",
   "apps": [
     {
       "id": "instafind",
       "status": "released",
       "name": { "ar": "InstaFind", "en": "InstaFind" },
-      "tagline": { "ar": "ابحث عن أي ملف أثناء الكتابة، حتى داخل PDF وWord.", "en": "Find any file as you type, even inside PDF and Word." },
+      "tagline": { "ar": "بحث سريع", "en": "Instant file search" },
+      "description": {
+        "ar": "ابحث عن أي ملف على جهازك أثناء الكتابة، بالعربية أو الإنجليزية، وحتى داخل ملفات PDF وWord.",
+        "en": "Find any file on your PC as you type, in English or Arabic, even inside PDF and Word documents."
+      },
+      "url": { "ar": "https://fastkiwi.app/arabic-file-search/", "en": "https://fastkiwi.app/arabic-file-search/en/" },
       "store": { "id": "9MTK4KMFQ657", "live": false },
       "winget": { "id": "Sarmad.InstaFind", "live": false },
-      "icon": "icons/instafind.svg",
+      "icon": "img/instafind.svg",
+      "download": "https://github.com/sarmadiq9090-coder/arabic-file-search/releases/latest/download/bahth.exe",
+      "release": { "repo": "sarmadiq9090-coder/arabic-file-search", "asset": "bahth.exe" },
       "hub": {
         "kind": "P",
-        "size_mb": 10,
+        "size_mb": 15,
         "data_dir": "%LOCALAPPDATA%\\BahthSari",
         "detect": [
           { "kind": "store", "pfn": "FastKiwi.InstaFind_sm1xjmj6v76yc", "app_id": "InstaFind" },
-          { "kind": "winget", "package_id": "Sarmad.InstaFind", "link": "bahth.exe", "exe": "bahth.exe" },
           { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\InstaFind\\bahth.exe" },
           { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\Bahth\\bahth.exe" },
-          { "kind": "path", "path": "%USERPROFILE%\\scoop\\apps\\instafind\\current\\bahth.exe" },
-          { "kind": "run_value", "name": "BahthSari" },
           { "kind": "reg_hint", "key": "HKCU\\Software\\BahthSari" }
-        ]
-      }
-    },
-    {
-      "id": "instawords",
-      "status": "released",
-      "name": { "ar": "InstaWords", "en": "InstaWords" },
-      "tagline": { "ar": "اكتب أي مبلغ بالحروف للشيكات والفواتير.", "en": "Write any amount in words for cheques and invoices." },
-      "store": { "id": "9P62P4WQSQNK", "live": false },
-      "winget": { "id": "Sarmad.InstaWords", "live": false },
-      "icon": "icons/instawords.svg",
-      "hub": {
-        "kind": "S",
-        "size_mb": 4,
-        "data_dir": "%APPDATA%\\FastKiwi\\InstaWords",
-        "module": { "web_dir": "web", "entry": "index.html" },
-        "detect": [
-          { "kind": "store", "pfn": "FastKiwi.InstaWords_sm1xjmj6v76yc", "app_id": "App" },
-          { "kind": "uninstall", "key": "{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1", "installer": "inno", "exe": "InstaWords.exe" },
-          { "kind": "winget", "package_id": "Sarmad.InstaWords", "link": "InstaWords.exe", "exe": "InstaWords.exe" },
-          { "kind": "path", "path": "%USERPROFILE%\\scoop\\apps\\instawords\\current\\InstaWords.exe" }
         ]
       }
     },
@@ -52,13 +34,20 @@
       "id": "remember-me",
       "status": "released",
       "name": { "ar": "ذكرني", "en": "Remember Me" },
-      "tagline": { "ar": "تذكيرات تبقى على الشاشة حتى تتعامل معها.", "en": "Reminders that stay on screen until you deal with them." },
+      "tagline": { "ar": "المهام والتذكيرات", "en": "Tasks & reminders" },
+      "description": {
+        "ar": "تذكيرات تبقى ظاهرة على الشاشة حتى تتعامل معها، مع تكرار مرن ونسخ احتياطي موثوق.",
+        "en": "Reminders that stay on screen until you deal with them, with flexible repeats and verified backups."
+      },
+      "url": { "ar": "https://fastkiwi.app/Remember-Me/ar/", "en": "https://fastkiwi.app/Remember-Me/" },
       "store": { "id": "9NGB1F7T7JGN", "live": true },
       "winget": { "id": "Sarmad.RememberMe", "live": false },
-      "icon": "icons/remember-me.png",
+      "icon": "img/remember-me.png",
+      "download": "https://github.com/sarmadiq9090-coder/Remember-Me/releases/download/v1.8.0/Remember-Me-Setup-1.8.0-x64.exe",
+      "release": { "repo": "sarmadiq9090-coder/Remember-Me", "asset": "Remember-Me-Setup-*-x64.exe" },
       "hub": {
         "kind": "L",
-        "size_mb": 90,
+        "size_mb": 110,
         "data_dir": "%APPDATA%\\Remember Me",
         "detect": [
           { "kind": "store", "pfn": "FastKiwi.RememberMeReminders_sm1xjmj6v76yc", "app_id": "RememberMe" },
@@ -70,30 +59,97 @@
       "id": "lemon",
       "status": "released",
       "name": { "ar": "Lemon", "en": "Lemon" },
-      "tagline": { "ar": "محادثة مع الذكاء الاصطناعي على جهازك، بلا إنترنت.", "en": "Chat with AI on your own PC, offline." },
+      "tagline": { "ar": "الذكاء الاصطناعي المحلي", "en": "Local AI chat" },
+      "description": {
+        "ar": "محادثة وبرمجة مع نماذج الذكاء الاصطناعي على جهازك عبر Ollama، بلا إنترنت، مع مساعدين يجيبون من ملفاتك فقط.",
+        "en": "Chat and code with AI models on your own PC through Ollama, fully offline, with assistants that answer only from your files."
+      },
+      "url": { "ar": "https://fastkiwi.app/ar/lemon/", "en": "https://fastkiwi.app/lemon/" },
       "store": null,
       "winget": { "id": "Sarmad.Lemon", "live": false },
-      "icon": "icons/lemon.png",
+      "icon": "img/lemon.png",
+      "download": "https://github.com/sarmadiq9090-coder/local-ai-chat/releases/latest/download/local-ai-chat.exe",
+      "release": { "repo": "sarmadiq9090-coder/local-ai-chat", "asset": "local-ai-chat.exe" },
       "hub": {
         "kind": "P",
         "size_mb": 10,
         "needs": { "ar": "يحتاج Ollama", "en": "Needs Ollama" },
         "data_dir": "%APPDATA%\\LocalAiChat",
         "detect": [
-          { "kind": "winget", "package_id": "Sarmad.Lemon", "link": "local-ai-chat.exe", "exe": "local-ai-chat.exe" },
           { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\LocalAiChat\\local-ai-chat.exe" },
           { "kind": "path", "path": "%LOCALAPPDATA%\\Programs\\Lemon\\local-ai-chat.exe" }
         ]
       }
     },
     {
+      "id": "instawords",
+      "status": "released",
+      "name": { "ar": "InstaWords", "en": "InstaWords" },
+      "tagline": { "ar": "تفقيط المبالغ", "en": "Amounts in words" },
+      "description": {
+        "ar": "اكتب أي مبلغ بالحروف للشيكات والفواتير، بالعربية أو الإنجليزية أو الفرنسية. في المتصفح أو كبرنامج ويندوز، وحتى بلا إنترنت.",
+        "en": "Write any amount in words for cheques and invoices, in Arabic, English or French. In your browser or as a Windows app, even offline."
+      },
+      "url": { "ar": "https://fastkiwi.app/instawords/", "en": "https://fastkiwi.app/instawords/" },
+      "store": { "id": "9P62P4WQSQNK", "live": false },
+      "winget": { "id": "Sarmad.InstaWords", "live": false },
+      "icon": "img/instawords.svg",
+      "download": "https://github.com/sarmadiq9090-coder/InstaWords/releases/download/v3.0.0/InstaWords_3.0.0_x64-setup.exe",
+      "release": { "repo": "sarmadiq9090-coder/InstaWords", "asset": "InstaWords_*_x64-setup.exe" },
+      "hub": {
+        "kind": "S",
+        "size_mb": 3,
+        "data_dir": "%APPDATA%\\FastKiwi\\InstaWords",
+        "module": { "web_dir": "web", "entry": "index.html" },
+        "detect": [
+          { "kind": "store", "pfn": "FastKiwi.InstaWords_sm1xjmj6v76yc", "app_id": "App" },
+          { "kind": "uninstall", "key": "{8F3B6C2A-5D4E-4A7B-9C1F-2E6D8A0B4C71}_is1", "installer": "inno", "exe": "InstaWords.exe" }
+        ]
+      }
+    },
+    {
+      "id": "scan-kiwi",
+      "status": "released",
+      "platform": "android",
+      "name": { "ar": "ماسح كيوي", "en": "Scan Kiwi" },
+      "tagline": { "ar": "ماسح مستندات لأندرويد", "en": "Document scanner for Android" },
+      "description": {
+        "ar": "امسح الورق إلى PDF على أندرويد. يعمل دون اتصال، ولا يتصل إلا للتحقق من التحديثات وتنزيلها من GitHub. مجاني ومفتوح المصدر.",
+        "en": "Scan paper to PDFs on Android. Works offline; online only to check for and download updates from GitHub. Free, open source."
+      },
+      "url": { "ar": "https://fastkiwi.app/ar/scan-kiwi/", "en": "https://fastkiwi.app/scan-kiwi/" },
+      "store": null,
+      "winget": null,
+      "icon": "img/scan-kiwi.svg"
+    },
+    {
+      "id": "remember-me-android",
+      "status": "released",
+      "platform": "android",
+      "name": { "ar": "ذكرني لأندرويد", "en": "Remember Me for Android" },
+      "tagline": { "ar": "تذكيرات لأندرويد", "en": "Reminders for Android" },
+      "description": {
+        "ar": "تذكيرات تبقى على هاتف أندرويد حتى تتعامل معها، بلا حساب ولا إعلانات. مجاني ومفتوح المصدر.",
+        "en": "Reminders that stay on your Android phone until you deal with them, with no account or ads. Free and open source."
+      },
+      "url": { "ar": "https://fastkiwi.app/ar/remember-me-android/", "en": "https://fastkiwi.app/remember-me-android/" },
+      "store": null,
+      "winget": null,
+      "icon": "img/remember-me.png"
+    },
+    {
       "id": "instaconvert",
       "status": "coming-soon",
       "name": { "ar": "InstaConvert", "en": "InstaConvert" },
-      "tagline": { "ar": "من PDF والصور إلى Excel، ويعلّم كل رقم يشكّ فيه.", "en": "PDFs and images to Excel; flags every doubtful number." },
+      "tagline": { "ar": "من PDF والصور إلى Excel", "en": "PDFs and images to Excel" },
+      "description": {
+        "ar": "يحوّل ملفات PDF والصور، مثل كشوف الحسابات والجداول الممسوحة، إلى Excel وWord ونص، ويُعلِّم كل رقم يشكّ فيه.",
+        "en": "Turns PDFs and images, such as bank statements and scanned tables, into Excel, Word and text, and flags every doubtful number."
+      },
+      "url": { "ar": "https://fastkiwi.app/ar/downloads/#instaconvert", "en": "https://fastkiwi.app/downloads/#instaconvert" },
       "store": null,
       "winget": null,
-      "icon": "icons/instaconvert.png",
+      "icon": "img/instaconvert.svg",
       "hub": {
         "kind": "P",
         "size_mb": 25,

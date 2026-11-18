@@ -88,6 +88,18 @@ pub fn clean_rel_path(url_path: &str, default: &str) -> Option<String> {
     Some(joined)
 }
 
+/// A file name in the Hub's own `icons` folder (downloaded catalog icons, icons of programs
+/// the person added): plain characters, `.png` or `.svg`.
+pub fn local_icon_name_ok(name: &str) -> bool {
+    let l = name.to_ascii_lowercase();
+    (l.ends_with(".png") || l.ends_with(".svg"))
+        && name.len() <= 100
+        && !name.contains("..")
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+}
+
 /// An embedded UI file by its path under `ui/`.
 pub fn ui_file(rel: &str) -> Option<&'static [u8]> {
     UI_FILES.iter().find(|(p, _)| *p == rel).map(|(_, b)| *b)

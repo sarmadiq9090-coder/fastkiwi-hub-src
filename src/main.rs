@@ -1,14 +1,16 @@
-//! FastKiwi.exe: the Hub window (Phase D prototype).
+//! FastKiwi-Hub.exe: the Arabic smart bar and the Hub window.
 //!
-//! One tao window. The Hub UI is one WebView2 served over the `fastkiwi` custom protocol (no
-//! local HTTP server). A hosted module gets its own child WebView2 with its own user-data
-//! folder, a navigation allowlist, no host objects, and only `fastkiwi-module@1` web messages:
-//! - kind S (web folder): its own origin `fkmod.<id>`, served by the Hub;
-//! - kind P (Phase D): the app's own `--hub-host` page on `127.0.0.1:<port>` (`hostproc`).
+//! One tao window for the Hub and one small window for the bar (opened by a global shortcut
+//! registered with `RegisterHotKey`, never a keyboard hook). Both are WebView2 pages served
+//! over the `fastkiwi` custom protocol (no local HTTP server). A hosted module gets its own
+//! child WebView2 with its own user-data folder, a navigation allowlist, no host objects, and
+//! only `fastkiwi-module@1` web messages.
 //!
-//! Detection is read only. Standalone launches are ShellExecute and forget. Updates run the
-//! app's own `--hub-update` (fastkiwi-hub-cli@1). The Hub itself has no network, install or
-//! uninstall code.
+//! Detection is read only. Launches are ShellExecute and forget, of an exe detection found
+//! (or a program the person picked), never with arguments from the catalog. Online: the
+//! signed catalog from fastkiwi.app, GitHub release metadata, and a local Ollama on
+//! 127.0.0.1 (`net.rs`, the only network code). The Hub never downloads or installs a
+//! program: installers open in the browser.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -25,7 +27,13 @@ fn main() {
 #[cfg(windows)]
 mod hub {
     use kiwi_hub::allowlist;
-    use kiwi_hub::catalog::{self, App as CatApp, Kind};
+    use kiwi_hub::catalog::{self, App as CatApp, Kind, Platform};
+    use kiwi_hub::findcli;
+    use kiwi_hub::hotkey::{self, windows::Hotkey};
+    use kiwi_hub::links;
+    use kiwi_hub::mine::{self, Program};
+    use kiwi_hub::online;
+    use kiwi_hub::updates::{self, Check};
     use kiwi_hub::detect::{self, AppDetection};
     use kiwi_hub::hosting::{self, UpdateRoute};
     use kiwi_hub::hostproc::{self, HostEvent, HostProcess, UpdateEvent, UpdateHandle};
@@ -112,6 +120,35 @@ mod hub {
             app: String,
             json: String,
         },
+        /// A message from the bar window's page.
+        BarIpc(String),
+        /// The global shortcut was pressed.
+        Hotkey,
+        HotkeyStatus(hotkey::Status),
+        /// A newer signed catalog arrived from fastkiwi.app.
+        Catalog(Box<catalog::Catalog>),
+        /// Update checks finished: (id, result) per app, plus InstaFind's own version.
+        Checks {
+            rows: Vec<(String, Value)>,
+            instafind: Option<String>,
+        },
+        IconsFetched,
+        FindDone {
+            seq: u64,
+            hits: Result<Vec<findcli::Hit>, String>,
+        },
+        Ollama(Option<String>),
+        AskDone {
+            seq: u64,
+            answer: Result<String, String>,
+        },
+    }
+
+    /// Which of the Hub's own pages sent a message.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Page {
+        Hub,
+        Bar,
     }
 
     #[derive(Debug, Clone)]
@@ -259,6 +296,26 @@ mod hub {
         /// `--dev-report` events, written when a shot run ends.
         report: Vec<Value>,
         started: Instant,
+        /// The Hub's own folder; `None` in screenshot runs, which write nothing.
+        dir: Option<PathBuf>,
+        catalog_serial: u64,
+        catalog_from_cache: bool,
+        /// Programs the person added.
+        mine: Vec<Program>,
+        /// Update check results by app id (`fastkiwi-hub` for the Hub itself).
+        checks: HashMap<String, Value>,
+        checking: bool,
+        /// InstaFind's version, from its own `--version` (its exe has no version resource).
+        instafind_version: Option<String>,
+        /// The bar window and its page (not in screenshot runs).
+        bar: Option<(tao::window::Window, WebView)>,
+        hotkey: Option<Hotkey>,
+        hotkey_status: Value,
+        last_hits: Vec<findcli::Hit>,
+        ollama: Option<String>,
+        ollama_probed: Option<Instant>,
+        history: Vec<String>,
+        _ctx: WebContext,
     }
 
     struct Run {
@@ -296,6 +353,22 @@ mod hub {
     fn serve_hub(req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
         if req.uri().host() != Some("hub") || req.method() != wry::http::Method::GET {
             return not_found(serve::HUB_CSP);
+        }
+        // Icons the Hub keeps in its own folder (catalog icons from fastkiwi.app, icons of
+        // programs the person added). Shown as images only.
+        if let Some(name) = req.uri().path().strip_prefix("/local-icons/") {
+            return match (serve::local_icon_name_ok(name), settings::hub_dir()) {
+                (true, Some(d)) => match std::fs::read(d.join("icons").join(name)) {
+                    Ok(b) if b.len() <= 512 * 1024 => respond(
+                        StatusCode::OK,
+                        serve::mime(name),
+                        serve::HUB_CSP,
+                        Cow::Owned(b),
+                    ),
+                    _ => not_found(serve::HUB_CSP),
+                },
+                _ => not_found(serve::HUB_CSP),
+            };
         }
         match serve::clean_rel_path(req.uri().path(), "index.html")
             .and_then(|rel| serve::ui_file(&rel).map(|b| (rel, b)))
@@ -345,6 +418,14 @@ mod hub {
                 let _ = s.SetAreHostObjectsAllowed(false);
                 let _ = s.SetIsStatusBarEnabled(false);
                 let _ = s.SetAreDevToolsEnabled(dev);
+                // No autofill or saved passwords in any page the Hub shows.
+                if let Ok(s4) = windows::core::Interface::cast::<
+                    webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings4,
+                >(&s)
+                {
+                    let _ = s4.SetIsGeneralAutofillEnabled(false);
+                    let _ = s4.SetIsPasswordAutosaveEnabled(false);
+                }
                 if is_hub {
                     let _ = s.SetIsZoomControlEnabled(false);
                 }
@@ -412,19 +493,30 @@ mod hub {
         a
     }
 
-    fn load_catalog(args: &Args) -> Vec<CatApp> {
-        let text = args
+    /// The catalog to start with: `--catalog <file>` (dev), else the signed copy cached from
+    /// fastkiwi.app when it is still good, else the copy inside the exe.
+    fn load_catalog(args: &Args, dir: Option<&std::path::Path>) -> (Vec<CatApp>, u64, bool) {
+        if let Some(text) = args
             .catalog
             .as_ref()
             .and_then(|p| std::fs::read_to_string(p).ok())
-            .unwrap_or_else(|| catalog::FIXTURE.to_string());
-        match catalog::parse(&text) {
-            Ok(c) => catalog::visible(&c, args.dev),
-            Err(e) => {
-                eprintln!("catalog: {e}");
-                Vec::new()
-            }
+        {
+            return match catalog::parse(&text) {
+                Ok(c) => (catalog::visible(&c, args.dev), c.serial, false),
+                Err(e) => {
+                    eprintln!("catalog: {e}");
+                    (Vec::new(), 0, false)
+                }
+            };
         }
+        let cached = online::cached_catalog(dir);
+        let (c, from_cache) = catalog::choose(
+            catalog::FIXTURE,
+            cached.as_ref().map(|(t, s)| (t.as_str(), s.as_str())),
+            &online::today(),
+            online::seen_serial(dir),
+        );
+        (catalog::visible(&c, args.dev), c.serial, from_cache)
     }
 
     fn spawn_detection(apps: Vec<CatApp>, proxy: EventLoopProxy<Ev>) {
@@ -449,7 +541,7 @@ mod hub {
                 windows::Win32::System::Com::COINIT_MULTITHREADED,
             );
         }
-        let apps = load_catalog(args);
+        let apps = load_catalog(args, settings::hub_dir().as_deref()).0;
         let d = detect::detect_all(&detect::windows::WindowsView, &apps);
         let text =
             serde_json::to_string_pretty(&json!({ "hub": VERSION, "apps": d })).unwrap_or_default();
@@ -461,6 +553,24 @@ mod hub {
             let _ = self
                 .hub
                 .evaluate_script(&format!("window.__hub && window.__hub.recv({v})"));
+        }
+
+        fn send_bar(&self, v: Value) {
+            if let Some((_, wv)) = &self.bar {
+                let _ = wv.evaluate_script(&format!("window.__hub && window.__hub.recv({v})"));
+            }
+        }
+
+        fn send_to(&self, page: Page, v: Value) {
+            match page {
+                Page::Hub => self.send_ui(v),
+                Page::Bar => self.send_bar(v),
+            }
+        }
+
+        fn send_all(&self, v: Value) {
+            self.send_bar(v.clone());
+            self.send_ui(v);
         }
 
         fn app(&self, id: &str) -> Option<&CatApp> {
@@ -483,7 +593,16 @@ mod hub {
                 return None;
             }
             let m = hub.module.as_ref()?;
-            if let Some(entry) = self.installs(id).iter().find_map(|i| i.web_entry.clone()) {
+            if app.third_party() {
+                return None; // no third-party modules in 0.3.0
+            }
+            // Only a copy that declares hub mode in its fastkiwi-hub.json (council C4).
+            if let Some(entry) = self
+                .installs(id)
+                .iter()
+                .filter(|i| i.hub.is_some())
+                .find_map(|i| i.web_entry.clone())
+            {
                 let root = PathBuf::from(entry).parent()?.to_path_buf();
                 return Some(ModuleSource::Installed {
                     root,
@@ -537,20 +656,7 @@ mod hub {
         }
 
         fn state(&self) -> Value {
-            let apps: Vec<Value> = self
-                .apps
-                .iter()
-                .map(|a| {
-                    let h = a.hub.as_ref();
-                    json!({
-                        "id": a.id, "status": a.status, "name": a.name, "tagline": a.tagline,
-                        "icon": a.icon, "store": a.store, "winget": a.winget,
-                        "kind": h.map(|h| h.kind), "size_mb": h.map(|h| h.size_mb),
-                        "on_demand": h.map(|h| &h.on_demand), "needs": h.and_then(|h| h.needs.as_ref()),
-                        "data_dir": h.map(|h| &h.data_dir),
-                    })
-                })
-                .collect();
+            let apps: Vec<Value> = self.apps.iter().map(|a| self.app_json(a)).collect();
             json!({
                 "type": "state",
                 "version": VERSION,
@@ -559,6 +665,14 @@ mod hub {
                 "detection": self.detection_json(),
                 "settings": self.settings,
                 "upd": self.upd,
+                "checks": self.checks,
+                "checking": self.checking,
+                "mine": self.mine_json(),
+                "catalog": {"serial": self.catalog_serial, "from_cache": self.catalog_from_cache},
+                "hotkey": self.hotkey_status,
+                "find": self.find_exe().is_some(),
+                "ollama": self.ollama.is_some(),
+                "history": if self.settings.bar_history { json!(self.history) } else { json!([]) },
                 "shot": self.args.shot.as_ref().map(|s| json!({"screen": s.screen, "theme": s.theme, "lang": s.lang})),
             })
         }
@@ -597,6 +711,7 @@ mod hub {
                             .unwrap_or_default()
                     ),
                     Target::Aumid(a) => format!("aumid {a}"),
+                    Target::Picked(_) => "picked".into(),
                 };
                 self.rec(json!({"ev": "launch", "app": id, "target": kind, "dry_run": true}));
                 return Ok(());
@@ -610,7 +725,11 @@ mod hub {
 
         /// The copy of a kind P app to run with `--hub-host`, if any declares it.
         fn host_install(&self, id: &str) -> Option<usize> {
-            hosting::host_install(self.app(id)?, self.installs(id))
+            let app = self.app(id)?;
+            if app.third_party() {
+                return None;
+            }
+            hosting::host_install(app, self.installs(id))
         }
 
         fn open_module(&mut self, id: &str) {
@@ -1037,7 +1156,7 @@ mod hub {
             }
         }
 
-        fn on_hub_msg(&mut self, body: &str, flow: &mut ControlFlow) {
+        fn on_page_msg(&mut self, page: Page, body: &str, flow: &mut ControlFlow) {
             if body.len() > 64 * 1024 {
                 return;
             }
@@ -1045,8 +1164,18 @@ mod hub {
                 return;
             };
             let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            if self.on_new_cmd(page, &s("cmd"), &v) {
+                return;
+            }
+            // Everything below is the Hub window's own page.
+            if page == Page::Bar && s("cmd") != "hello" {
+                return;
+            }
             match s("cmd").as_str() {
-                "hello" => self.send_ui(self.state()),
+                "hello" => {
+                    let st = self.state();
+                    self.send_to(page, st);
+                }
                 "rescan" => {
                     self.send_ui(json!({"type": "scanning"}));
                     spawn_detection(self.apps.clone(), self.proxy.clone());
@@ -1085,10 +1214,22 @@ mod hub {
                 }
                 "settings" => {
                     if let Some(st) = v.get("settings") {
+                        let old_hotkey = self.settings.hotkey.clone();
+                        let old_history = self.settings.bar_history;
                         self.settings = Settings::from_json(&st.to_string());
                         if self.args.shot.is_none() {
                             let _ = settings::save(&self.settings);
                         }
+                        if self.settings.hotkey != old_hotkey
+                            && let Some(h) = &self.hotkey
+                        {
+                            h.rebind(&self.settings.hotkey);
+                        }
+                        if old_history && !self.settings.bar_history {
+                            self.clear_history();
+                        }
+                        let st = self.state();
+                        self.send_to(Page::Bar, st);
                     }
                     if let Some(r) = v.get("resolved") {
                         let t = serde_json::from_value(r["theme"].clone()).unwrap_or(Theme::Light);
@@ -1145,7 +1286,7 @@ mod hub {
 
         fn on_event(&mut self, ev: Ev, flow: &mut ControlFlow) {
             match ev {
-                Ev::HubIpc(body) => self.on_hub_msg(&body, flow),
+                Ev::HubIpc(body) => self.on_page_msg(Page::Hub, &body, flow),
                 Ev::ModuleIpc { app, body } => self.on_module_msg(&app, &body),
                 Ev::ModuleLoaded { app, epoch } => {
                     let p = self.proxy.clone();
@@ -1170,13 +1311,18 @@ mod hub {
                 Ev::Detected(mut d) => {
                     self.add_dev_hosts(&mut d);
                     self.detection = Some(d);
-                    self.send_ui(json!({"type": "detection", "detection": self.detection_json()}));
-                    // The update check runs once per start, and only if the user turned it on.
+                    // Online once per start (at most once a day thanks to the caches), and only
+                    // while the setting is on: the signed catalog, icons, and release checks.
                     if self.settings.check_updates && !self.auto_checked && self.args.shot.is_none()
                     {
                         self.auto_checked = true;
                         self.check_all();
+                        self.refresh_catalog();
+                        self.fetch_icons();
+                        self.run_checks(false);
                     }
+                    let st = json!({"type": "detection", "detection": self.detection_json(), "mine": self.mine_json(), "find": self.find_exe().is_some()});
+                    self.send_all(st);
                 }
                 Ev::Host { app, epoch, ev } => self.on_host(&app, epoch, ev),
                 Ev::Update { app, run, ev } => self.on_update(&app, run, ev),
@@ -1205,6 +1351,58 @@ mod hub {
                     if let Some(m) = self.modules.get(&app) {
                         let _ = m.webview.evaluate_script(OPEN_OWN_JS);
                     }
+                }
+                Ev::BarIpc(body) => self.on_page_msg(Page::Bar, &body, flow),
+                Ev::Hotkey => self.show_bar(),
+                Ev::HotkeyStatus(st) => {
+                    self.hotkey_status = serde_json::to_value(&st).unwrap_or(Value::Null);
+                    self.send_all(json!({"type": "hotkey", "status": self.hotkey_status}));
+                }
+                Ev::Catalog(c) => {
+                    self.catalog_serial = c.serial;
+                    self.catalog_from_cache = true;
+                    self.apps = catalog::visible(&c, self.args.dev);
+                    spawn_detection(self.apps.clone(), self.proxy.clone());
+                    self.fetch_icons();
+                    let st = self.state();
+                    self.send_all(st);
+                }
+                Ev::Checks { rows, instafind } => {
+                    self.checking = false;
+                    if instafind.is_some() {
+                        self.instafind_version = instafind;
+                    }
+                    for (id, v) in rows {
+                        self.checks.insert(id, v);
+                    }
+                    let st = self.state();
+                    self.send_all(st);
+                }
+                Ev::IconsFetched => {
+                    let st = self.state();
+                    self.send_all(st);
+                }
+                Ev::FindDone { seq, hits } => {
+                    let v = match &hits {
+                        Ok(h) => json!({"type": "find", "seq": seq, "ok": true,
+                            "hits": h.iter().map(|x| json!({"name": x.name, "dir": x.path.rsplit_once('\\').map(|(d, _)| d).unwrap_or(""), "is_dir": x.is_dir})).collect::<Vec<_>>()}),
+                        Err(e) => json!({"type": "find", "seq": seq, "ok": false, "error": e}),
+                    };
+                    if let Ok(h) = hits {
+                        self.last_hits = h;
+                    }
+                    self.send_all(v);
+                }
+                Ev::Ollama(model) => {
+                    self.ollama = model;
+                    self.send_all(json!({"type": "ollama", "ok": self.ollama.is_some()}));
+                }
+                Ev::AskDone { seq, answer } => {
+                    let v = match answer {
+                        Ok(t) => json!({"type": "ask", "seq": seq, "ok": true, "text": t}),
+                        Err(_) => json!({"type": "ask", "seq": seq, "ok": false}),
+                    };
+                    self.send_all(v);
                 }
                 Ev::ShotNow => {
                     self.write_report();
@@ -1237,6 +1435,593 @@ mod hub {
         }
     }
 
+    /// The Hub's own page (`index.html`) or the bar's (`bar.html`): the only pages with wry's
+    /// IPC handler, both on the Hub's own origin.
+    fn page_builder<'a>(
+        ctx: &'a mut WebContext,
+        page: Page,
+        proxy: &EventLoopProxy<Ev>,
+        dev: bool,
+    ) -> WebViewBuilder<'a> {
+        let p_ipc = proxy.clone();
+        let p_nav = proxy.clone();
+        let url = match page {
+            Page::Hub => allowlist::hub_start_url(),
+            Page::Bar => format!("{}://hub/bar.html", allowlist::HUB_SCHEME),
+        };
+        WebViewBuilder::new_with_web_context(ctx)
+            .with_custom_protocol(allowlist::HUB_SCHEME.into(), |_, req| serve_hub(req))
+            .with_url(url)
+            .with_ipc_handler(move |req: Request<String>| {
+                if allowlist::hub_nav_allowed(&req.uri().to_string()) {
+                    let body = req.into_body();
+                    let _ = p_ipc.send_event(match page {
+                        Page::Hub => Ev::HubIpc(body),
+                        Page::Bar => Ev::BarIpc(body),
+                    });
+                }
+            })
+            .with_navigation_handler(move |url| {
+                let ok = allowlist::hub_nav_allowed(&url);
+                if !ok {
+                    let _ = p_nav.send_event(Ev::Blocked {
+                        who: "hub".into(),
+                        host: allowlist::host_of(&url),
+                    });
+                }
+                ok
+            })
+            .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
+            .with_download_started_handler(|_, _| false)
+            .with_permission_handler(|_| PermissionResponse::Deny)
+            .with_devtools(dev)
+            .with_hotkeys_zoom(false)
+            .with_https_scheme(true)
+            .with_browser_accelerator_keys(false)
+            .with_default_context_menus(dev)
+            .with_additional_browser_args(browser_args())
+    }
+
+    fn build_page(
+        window: &tao::window::Window,
+        ctx: &mut WebContext,
+        page: Page,
+        proxy: &EventLoopProxy<Ev>,
+        dev: bool,
+    ) -> wry::Result<WebView> {
+        page_builder(ctx, page, proxy, dev).build(window)
+    }
+
+    const BAR_W: f64 = 680.0;
+    const BAR_H: f64 = 460.0;
+
+    /// The bar's own small window: no frame, on top, not in the taskbar, hidden until the
+    /// shortcut is pressed.
+    fn build_bar(
+        el: &tao::event_loop::EventLoop<Ev>,
+        ctx: &mut WebContext,
+        proxy: &EventLoopProxy<Ev>,
+        dev: bool,
+    ) -> Option<(tao::window::Window, WebView)> {
+        use tao::platform::windows::WindowBuilderExtWindows;
+        let mut wb = WindowBuilder::new()
+            .with_title("FastKiwi")
+            .with_decorations(false)
+            .with_always_on_top(true)
+            .with_resizable(false)
+            .with_visible(false)
+            .with_skip_taskbar(true)
+            .with_inner_size(LogicalSize::new(BAR_W, BAR_H));
+        if let Ok(icon) = Icon::from_resource(1, None) {
+            wb = wb.with_window_icon(Some(icon));
+        }
+        let w = wb.build(el).ok()?;
+        let wv = build_page(&w, ctx, Page::Bar, proxy, dev).ok()?;
+        harden(&wv, dev, true);
+        Some((w, wv))
+    }
+
+    /// Run the online checks for these apps on a worker thread.
+    struct CheckJob {
+        id: String,
+        repo: String,
+        asset: Option<String>,
+        allow_pre: bool,
+        installed: Option<String>,
+    }
+
+    impl Hub {
+        fn icon_for(&self, a: &CatApp) -> String {
+            if let Some(name) = links::icon_file_name(&a.icon) {
+                // The icons inside the exe are FastKiwi's; a third-party entry never gets one.
+                if !a.third_party() && serve::ui_file(&format!("icons/{name}")).is_some() {
+                    return format!("icons/{name}");
+                }
+                if let Some(d) = settings::hub_dir()
+                    && let Some(p) = online::icon_path(&d, &a.id, &a.icon)
+                    && p.is_file()
+                    && let Some(f) = p.file_name()
+                {
+                    return format!("local-icons/{}", f.to_string_lossy());
+                }
+            }
+            "icons/app.svg".into()
+        }
+
+        /// The site name a third-party entry would open (ASCII, punycode for IDN hosts).
+        fn site_of(a: &CatApp) -> Option<String> {
+            a.download
+                .as_deref()
+                .or(a.url.as_ref().map(|u| u.en.as_str()))
+                .and_then(links::plain_https)
+                .and_then(|u| u.host_str().map(str::to_string))
+        }
+
+        fn app_json(&self, a: &CatApp) -> Value {
+            let h = a.hub.as_ref();
+            json!({
+                "id": a.id, "status": a.status, "name": a.name, "tagline": a.tagline,
+                "description": a.description, "url": a.url.is_some(),
+                "store": a.store.as_ref().map(|s| json!({"id": s.id, "live": s.live})),
+                "platform": a.platform,
+                "publisher": a.publisher, "third_party": a.third_party(),
+                "site": if a.third_party() { Self::site_of(a) } else { None },
+                "download": a.download.is_some(), "release": a.release.is_some(),
+                "icon": self.icon_for(a),
+                "kind": h.map(|h| h.kind), "size_mb": h.and_then(|h| h.size_mb),
+                "on_demand": h.map(|h| &h.on_demand), "needs": h.and_then(|h| h.needs.as_ref()),
+            })
+        }
+
+        fn mine_json(&self) -> Value {
+            Value::Array(
+                self.mine
+                    .iter()
+                    .map(|p| {
+                        let icon = p
+                            .icon
+                            .as_ref()
+                            .filter(|_| self.dir.is_some())
+                            .map(|i| format!("local-icons/{i}"))
+                            .unwrap_or_else(|| "icons/app.svg".into());
+                        json!({"id": p.id, "name": p.name, "icon": icon,
+                            "file": p.path.rsplit('\\').next().unwrap_or(""),
+                            "exists": std::path::Path::new(&p.path).is_file()})
+                    })
+                    .collect(),
+            )
+        }
+
+        /// The InstaFind exe whose command line the bar may use.
+        fn find_exe(&self) -> Option<String> {
+            if self
+                .instafind_version
+                .as_deref()
+                .is_some_and(|v| !findcli::supports(v))
+            {
+                return None;
+            }
+            self.installs("instafind")
+                .iter()
+                .find(|i| i.source != detect::Source::Store && i.launchable)
+                .and_then(|i| i.exe.clone())
+        }
+
+        fn show_bar(&mut self) {
+            let Some((w, _)) = &self.bar else {
+                return;
+            };
+            if let Some(m) = w.current_monitor().or_else(|| w.primary_monitor()) {
+                let sf = m.scale_factor();
+                let pos = m.position().to_logical::<f64>(sf);
+                let size = m.size().to_logical::<f64>(sf);
+                w.set_outer_position(LogicalPosition::new(
+                    pos.x + (size.width - BAR_W) / 2.0,
+                    pos.y + size.height * 0.16,
+                ));
+            }
+            w.set_visible(true);
+            w.set_focus();
+            let st = self.state();
+            self.send_bar(st);
+            self.send_bar(json!({"type": "bar-show"}));
+        }
+
+        fn hide_bar(&mut self) {
+            if let Some((w, _)) = &self.bar {
+                w.set_visible(false);
+            }
+        }
+
+        fn refresh_catalog(&self) {
+            if !online::catalog_due(self.dir.as_deref(), updates::AUTO_MAX_AGE_SECS) {
+                return;
+            }
+            let dir = self.dir.clone();
+            let min = self.catalog_serial;
+            let p = self.proxy.clone();
+            std::thread::spawn(move || match online::refresh_catalog(dir.as_deref(), min) {
+                Ok(Some(c)) => {
+                    let _ = p.send_event(Ev::Catalog(Box::new(c)));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    if std::env::var_os("FASTKIWI_TRACE").is_some() {
+                        eprintln!("catalog: {e}");
+                    }
+                }
+            });
+        }
+
+        fn fetch_icons(&self) {
+            let Some(dir) = self.dir.clone() else {
+                return;
+            };
+            let todo: Vec<(String, String)> = self
+                .apps
+                .iter()
+                .filter(|a| self.icon_for(a) == "icons/app.svg" && links::remote_icon(&a.icon).is_some())
+                .map(|a| (a.id.clone(), a.icon.clone()))
+                .collect();
+            if todo.is_empty() {
+                return;
+            }
+            let p = self.proxy.clone();
+            std::thread::spawn(move || {
+                for (id, icon) in todo {
+                    online::fetch_icon(&dir, &id, &icon);
+                }
+                let _ = p.send_event(Ev::IconsFetched);
+            });
+        }
+
+        /// Compare each installed FastKiwi app (and the Hub itself) with its newest GitHub
+        /// release. `force`: the "Check now" button (the cache is reused for 10 minutes).
+        fn run_checks(&mut self, force: bool) {
+            if self.checking {
+                return;
+            }
+            let mut jobs: Vec<CheckJob> = self
+                .apps
+                .iter()
+                .filter(|a| !a.third_party() && a.platform == Platform::Windows)
+                .filter_map(|a| {
+                    let r = a.release.as_ref()?;
+                    let inst = self.installs(&a.id).first()?;
+                    Some(CheckJob {
+                        id: a.id.clone(),
+                        repo: r.repo.clone(),
+                        asset: r.asset.clone(),
+                        allow_pre: false,
+                        installed: inst.version.clone(),
+                    })
+                })
+                .collect();
+            jobs.push(CheckJob {
+                id: "fastkiwi-hub".into(),
+                repo: links::HUB_REPO.into(),
+                asset: Some("FastKiwi-Hub.exe".into()),
+                // The Hub is a preview: its own pre-releases count.
+                allow_pre: true,
+                installed: Some(VERSION.into()),
+            });
+            let find = self
+                .installs("instafind")
+                .iter()
+                .find(|i| i.source != detect::Source::Store && i.launchable)
+                .and_then(|i| i.exe.clone())
+                .filter(|_| self.instafind_version.is_none());
+            self.checking = true;
+            self.send_all(json!({"type": "checking"}));
+            let dir = self.dir.clone();
+            let p = self.proxy.clone();
+            let age = if force {
+                updates::MANUAL_MAX_AGE_SECS
+            } else {
+                updates::AUTO_MAX_AGE_SECS
+            };
+            std::thread::spawn(move || {
+                let instafind = find.as_deref().and_then(findcli::version);
+                let mut rows = Vec::new();
+                for j in jobs {
+                    let installed = if j.id == "instafind" {
+                        j.installed.or_else(|| instafind.clone())
+                    } else {
+                        j.installed
+                    };
+                    let v = match online::latest(
+                        dir.as_deref(),
+                        &j.repo,
+                        j.asset.as_deref(),
+                        j.allow_pre,
+                        age,
+                    ) {
+                        Ok(l) => {
+                            let mut v = serde_json::to_value(updates::compare(installed.as_deref(), l))
+                                .unwrap_or(Value::Null);
+                            if let Value::Object(o) = &mut v {
+                                o.insert("installed".into(), json!(installed));
+                            }
+                            v
+                        }
+                        Err(()) => serde_json::to_value(Check::Unreachable).unwrap_or(Value::Null),
+                    };
+                    rows.push((j.id, v));
+                }
+                let _ = p.send_event(Ev::Checks { rows, instafind });
+            });
+        }
+
+        fn lang_text<'a>(&self, t: &'a catalog::Text, v: &Value) -> &'a str {
+            if v.get("lang").and_then(Value::as_str) == Some("en") {
+                &t.en
+            } else {
+                &t.ar
+            }
+        }
+
+        /// The URL behind an app's button, from the catalog or the last update check.
+        fn link_for(&self, id: &str, what: &str, v: &Value) -> Option<String> {
+            let a = self.app(id)?;
+            match what {
+                "page" => a.url.as_ref().map(|u| self.lang_text(u, v).to_string()),
+                "download" => a.download.clone(),
+                "store" => a
+                    .store
+                    .as_ref()
+                    .filter(|s| s.live)
+                    .and_then(|s| links::store_page(&s.id)),
+                "update" if !a.third_party() => {
+                    let l = self.checks.get(id)?.get("latest")?;
+                    l.get("download")
+                        .and_then(Value::as_str)
+                        .or_else(|| l.get("page").and_then(Value::as_str))
+                        .map(str::to_string)
+                }
+                _ => None,
+            }
+            .filter(|u| {
+                a.may_open(u)
+                    || (what == "update"
+                        && a.release.as_ref().is_some_and(|r| {
+                            u.starts_with(&links::release_asset_prefix(&r.repo))
+                                || u.starts_with(&format!("{}/", links::releases_page(&r.repo)))
+                        }))
+            })
+        }
+
+        fn hub_link(&self, what: &str) -> Option<String> {
+            Some(match what {
+                "support" => links::SUPPORT.into(),
+                "site" => links::SITE.into(),
+                "releases" => links::HUB_RELEASES.into(),
+                "source" => "https://github.com/sarmadiq9090-coder/fastkiwi-hub".into(),
+                "adding" => "https://github.com/sarmadiq9090-coder/fastkiwi-hub/blob/main/docs/ADDING-AN-APP.md".into(),
+                "update" => {
+                    let l = self.checks.get("fastkiwi-hub").and_then(|c| c.get("latest"));
+                    l.and_then(|l| l.get("download").or_else(|| l.get("page")))
+                        .and_then(Value::as_str)
+                        .filter(|u| u.starts_with(&format!("{}/", links::HUB_RELEASES)))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| links::HUB_RELEASES.into())
+                }
+                _ => return None,
+            })
+        }
+
+        fn open_link(&mut self, page: Page, v: &Value) {
+            let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            let (id, what) = (s("app"), s("what"));
+            let Some(url) = self.link_for(&id, &what, v) else {
+                self.send_to(page, json!({"type": "link", "ok": false}));
+                return;
+            };
+            if self.app(&id).is_some_and(|a| a.third_party()) {
+                let host = links::plain_https(&url)
+                    .and_then(|u| u.host_str().map(str::to_string))
+                    .unwrap_or_default();
+                let confirmed = v.get("confirm").and_then(Value::as_bool) == Some(true);
+                if !self.settings.trusted_sites.contains(&host) {
+                    if !confirmed {
+                        self.send_to(page, json!({"type": "confirm-site", "app": id, "what": what, "site": host}));
+                        return;
+                    }
+                    self.settings.trusted_sites.push(host);
+                    self.settings.trusted_sites.sort();
+                    if self.dir.is_some() {
+                        let _ = settings::save(&self.settings);
+                    }
+                }
+            }
+            let r = if self.args.shot.is_some() {
+                Ok(()) // screenshot runs never open the browser
+            } else {
+                win::open_url(&url)
+            };
+            self.send_to(page, json!({"type": "link", "ok": r.is_ok()}));
+        }
+
+        fn add_program(&mut self) {
+            let Some(dir) = self.dir.clone() else {
+                return;
+            };
+            let ar = self.resolved.1 == Lang::Ar;
+            let (title, label) = if ar {
+                ("أضف برنامجًا من جهازك", "البرامج والاختصارات")
+            } else {
+                ("Add a program from your PC", "Programs and shortcuts")
+            };
+            let Some(path) = win::pick_program(self.window.hwnd(), title, label) else {
+                return;
+            };
+            let name = if path.to_ascii_lowercase().ends_with(".exe") {
+                win::file_description(&path)
+            } else {
+                None
+            };
+            let r = mine::add(&mut self.mine, &path, name);
+            match r {
+                Ok(p) => {
+                    let icon = mine::icon_name(&p.id);
+                    if win::save_file_icon(&path, &dir.join("icons").join(&icon)).is_ok()
+                        && let Some(e) = self.mine.iter_mut().find(|x| x.id == p.id)
+                    {
+                        e.icon = Some(icon);
+                    }
+                    let _ = mine::save(&dir, &self.mine);
+                    self.send_ui(json!({"type": "mine-added", "name": p.name}));
+                }
+                Err(e) => self.send_ui(json!({"type": "mine-error", "error": e})),
+            }
+            let st = self.state();
+            self.send_all(st);
+        }
+
+        fn remove_program(&mut self, id: &str) {
+            let Some(dir) = self.dir.clone() else {
+                return;
+            };
+            if let Some(pos) = self.mine.iter().position(|p| p.id == id) {
+                let p = self.mine.remove(pos);
+                if let Some(i) = p.icon {
+                    let _ = std::fs::remove_file(dir.join("icons").join(i));
+                }
+                let _ = mine::save(&dir, &self.mine);
+            }
+            let st = self.state();
+            self.send_all(st);
+        }
+
+        fn clear_history(&mut self) {
+            self.history.clear();
+        }
+
+        /// Commands both pages may send. `true` when handled.
+        fn on_new_cmd(&mut self, page: Page, cmd: &str, v: &Value) -> bool {
+            let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            let seq = v.get("seq").and_then(Value::as_u64).unwrap_or(0);
+            match cmd {
+                "open-link" => self.open_link(page, v),
+                "hub-link" => {
+                    if let Some(u) = self.hub_link(&s("what"))
+                        && self.args.shot.is_none()
+                    {
+                        let _ = win::open_url(&u);
+                    }
+                }
+                "check-updates" => self.run_checks(true),
+                "add-program" if page == Page::Hub => self.add_program(),
+                "remove-program" if page == Page::Hub => self.remove_program(&s("id")),
+                "launch-mine" => {
+                    let id = s("id");
+                    let r = match self.mine.iter().find(|p| p.id == id) {
+                        Some(p) if self.args.shot.is_none() => {
+                            win::launch(&Target::Picked(p.path.clone()))
+                        }
+                        Some(_) => Ok(()),
+                        None => Err("not found".into()),
+                    };
+                    let name = self.mine.iter().find(|p| p.id == id).map(|p| p.name.clone());
+                    self.send_to(page, json!({"type": "launched", "app": id, "name": name, "ok": r.is_ok(), "error": r.err()}));
+                    if page == Page::Bar {
+                        self.hide_bar();
+                    }
+                }
+                "bar-launch" => {
+                    let id = s("app");
+                    let r = match self.first_launchable(&id) {
+                        Some(i) => self.launch(&id, i),
+                        None => Err("not installed".into()),
+                    };
+                    let ok = r.is_ok();
+                    self.send_to(page, json!({"type": "launched", "app": id, "ok": ok, "error": r.err()}));
+                    if page == Page::Bar && ok {
+                        self.hide_bar();
+                    }
+                }
+                "bar-find" => {
+                    let Some(exe) = self.find_exe() else {
+                        self.send_to(page, json!({"type": "find", "seq": seq, "ok": false, "error": "no-instafind"}));
+                        return true;
+                    };
+                    let q = s("q");
+                    let known = self.instafind_version.clone();
+                    let p = self.proxy.clone();
+                    std::thread::spawn(move || {
+                        let version = known.clone().or_else(|| findcli::version(&exe));
+                        if known.is_none() {
+                            let _ = p.send_event(Ev::Checks {
+                                rows: Vec::new(),
+                                instafind: Some(version.clone().unwrap_or_else(|| "0".into())),
+                            });
+                        }
+                        let hits = match version.as_deref() {
+                            Some(v) if findcli::supports(v) => findcli::search(&exe, &q, 8),
+                            _ => Err("old-instafind".into()),
+                        };
+                        let _ = p.send_event(Ev::FindDone { seq, hits });
+                    });
+                }
+                "bar-open" => {
+                    let i = v.get("i").and_then(Value::as_u64).unwrap_or(u64::MAX) as usize;
+                    let open = v.get("open").and_then(Value::as_bool).unwrap_or(false);
+                    if let Some(h) = self.last_hits.get(i).cloned() {
+                        let _ = win::open_found(&h.path, open);
+                        if page == Page::Bar {
+                            self.hide_bar();
+                        }
+                    }
+                }
+                "ollama-probe" => {
+                    if self
+                        .ollama_probed
+                        .is_none_or(|t| t.elapsed() > Duration::from_secs(30))
+                    {
+                        self.ollama_probed = Some(Instant::now());
+                        let p = self.proxy.clone();
+                        std::thread::spawn(move || {
+                            let _ = p.send_event(Ev::Ollama(online::ollama_model()));
+                        });
+                    }
+                }
+                "bar-ask" => {
+                    let Some(model) = self.ollama.clone() else {
+                        self.send_to(page, json!({"type": "ask", "seq": seq, "ok": false}));
+                        return true;
+                    };
+                    let q = s("q");
+                    let p = self.proxy.clone();
+                    std::thread::spawn(move || {
+                        let answer = online::ollama_ask(&model, &q);
+                        let _ = p.send_event(Ev::AskDone { seq, answer });
+                    });
+                }
+                "bar-hide" => self.hide_bar(),
+                "show-hub" => {
+                    self.hide_bar();
+                    self.window.set_minimized(false);
+                    self.window.set_visible(true);
+                    self.window.set_focus();
+                }
+                "history-add" => {
+                    let q: String = s("q").trim().chars().take(200).collect();
+                    if self.settings.bar_history && !q.is_empty() {
+                        self.history.retain(|h| h != &q);
+                        self.history.insert(0, q);
+                        self.history.truncate(20);
+                    }
+                }
+                "history-clear" => {
+                    self.clear_history();
+                    let st = self.state();
+                    self.send_all(st);
+                }
+                _ => return false,
+            }
+            true
+        }
+    }
+
     pub fn run() {
         let args = parse_args();
         SHOT_MODE.store(args.shot.is_some(), std::sync::atomic::Ordering::Relaxed);
@@ -1244,10 +2029,14 @@ mod hub {
             write_detect_json(&args, out);
             return;
         }
+        if wry::webview_version().is_err() {
+            win::webview2_missing();
+            return;
+        }
         let event_loop = EventLoopBuilder::<Ev>::with_user_event().build();
         let proxy = event_loop.create_proxy();
         let mut wb = WindowBuilder::new()
-            .with_title("FastKiwi")
+            .with_title("FastKiwi Hub")
             .with_inner_size(LogicalSize::new(1366.0, 768.0))
             .with_min_inner_size(LogicalSize::new(720.0, 520.0));
         if let Ok(icon) = Icon::from_resource(1, None) {
@@ -1276,36 +2065,7 @@ mod hub {
         }
 
         let mut hub_ctx = WebContext::new(Some(data_dir("hub")));
-        let p_ipc = proxy.clone();
-        let p_nav = proxy.clone();
-        let hub = WebViewBuilder::new_with_web_context(&mut hub_ctx)
-            .with_custom_protocol(allowlist::HUB_SCHEME.into(), |_, req| serve_hub(req))
-            .with_url(allowlist::hub_start_url())
-            .with_ipc_handler(move |req: Request<String>| {
-                if allowlist::hub_nav_allowed(&req.uri().to_string()) {
-                    let _ = p_ipc.send_event(Ev::HubIpc(req.into_body()));
-                }
-            })
-            .with_navigation_handler(move |url| {
-                let ok = allowlist::hub_nav_allowed(&url);
-                if !ok {
-                    let _ = p_nav.send_event(Ev::Blocked {
-                        who: "hub".into(),
-                        host: allowlist::host_of(&url),
-                    });
-                }
-                ok
-            })
-            .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
-            .with_download_started_handler(|_, _| false)
-            .with_permission_handler(|_| PermissionResponse::Deny)
-            .with_devtools(args.dev)
-            .with_hotkeys_zoom(false)
-            .with_https_scheme(true)
-            .with_browser_accelerator_keys(false)
-            .with_default_context_menus(args.dev)
-            .with_additional_browser_args(browser_args())
-            .build(&window);
+        let hub = build_page(&window, &mut hub_ctx, Page::Hub, &proxy, args.dev);
         let hub = match hub {
             Ok(h) => h,
             Err(e) => {
@@ -1315,8 +2075,36 @@ mod hub {
         };
         harden(&hub, args.dev, true);
 
-        let apps = load_catalog(&args);
+        // Screenshot runs write nothing to the Hub's folder.
+        let dir = if args.shot.is_some() {
+            None
+        } else {
+            settings::hub_dir()
+        };
+        let (apps, catalog_serial, catalog_from_cache) = load_catalog(&args, dir.as_deref());
         spawn_detection(apps.clone(), proxy.clone());
+        let settings_now = if args.shot.is_some() {
+            Settings::default()
+        } else {
+            settings::load()
+        };
+        // The bar window (hidden until the shortcut) and the shortcut itself.
+        let (bar, hk) = if args.shot.is_some() {
+            (None, None)
+        } else {
+            let bar = build_bar(&event_loop, &mut hub_ctx, &proxy, args.dev);
+            let (p1, p2) = (proxy.clone(), proxy.clone());
+            let hk = Hotkey::start(
+                &settings_now.hotkey,
+                move || {
+                    let _ = p1.send_event(Ev::Hotkey);
+                },
+                move |st| {
+                    let _ = p2.send_event(Ev::HotkeyStatus(st));
+                },
+            );
+            (bar, hk)
+        };
         if args.shot.is_some() {
             let p = proxy.clone();
             std::thread::spawn(move || {
@@ -1325,11 +2113,22 @@ mod hub {
             });
         }
         let mut state = Hub {
-            settings: if args.shot.is_some() {
-                Settings::default()
-            } else {
-                settings::load()
-            },
+            mine: dir.as_deref().map(mine::load).unwrap_or_default(),
+            history: Vec::new(),
+            dir,
+            catalog_serial,
+            catalog_from_cache,
+            checks: HashMap::new(),
+            checking: false,
+            instafind_version: None,
+            bar,
+            hotkey: hk,
+            hotkey_status: json!({"state": "off"}),
+            last_hits: Vec::new(),
+            ollama: None,
+            ollama_probed: None,
+            _ctx: hub_ctx,
+            settings: settings_now,
             args,
             window,
             hub,
@@ -1364,11 +2163,24 @@ mod hub {
                 Event::UserEvent(ev) => state.on_event(ev, flow),
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
+                    window_id,
                     ..
-                } => *flow = ControlFlow::Exit,
+                } => {
+                    if state.bar.as_ref().is_some_and(|(w, _)| w.id() == window_id) {
+                        state.hide_bar();
+                    } else {
+                        *flow = ControlFlow::Exit;
+                    }
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::Focused(false),
+                    window_id,
+                    ..
+                } if state.bar.as_ref().is_some_and(|(w, _)| w.id() == window_id) => {
+                    state.hide_bar();
+                }
                 _ => {}
             }
-            let _ = &hub_ctx;
         });
     }
 }

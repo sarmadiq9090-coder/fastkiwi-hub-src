@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Conformance harness for fastkiwi-hub-cli@1 (check-app) and a conforming stub app (stub-app) for its tests."
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
 publish = false
 
 [lib]
